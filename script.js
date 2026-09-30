@@ -548,61 +548,77 @@
   window.addEventListener("resize", () => titleMenu.refresh());
 
   /* =========================================================
-     MECHS — paint schemes, classes, weapons
+     MECHS — classes (each with its own colors and weapons)
      ========================================================= */
-  const PAINTS = [
-    { name: "TRICOLOR", m1: "#f1f3f9", m2: "#2f5fd6", m3: "#e63946", eye: "#7df9ff", beam: "#ff6bd6" },
-    { name: "SUNBURST", m1: "#f0a13a", m2: "#c0612b", m3: "#3a86ff", eye: "#7df9ff", beam: "#ffd23f" },
-    { name: "GLACIER", m1: "#a9c1ee", m2: "#5a78b8", m3: "#e63946", eye: "#ffd23f", beam: "#ff6bd6" },
-    { name: "AURUM", m1: "#e0c341", m2: "#9c7d22", m3: "#e63946", eye: "#7dff9b", beam: "#9dff6b" },
-    { name: "SHADOW", m1: "#4f536f", m2: "#2a2c45", m3: "#ffb703", eye: "#ff3b3b", beam: "#ff3b3b" },
-  ];
-  const HOSTILE = { name: "HOSTILE", m1: "#8d929e", m2: "#6b2233", m3: "#ff3b3b", eye: "#ff3b3b", beam: "#ff3b3b" };
   const CLASS_INFO = {
-    titan: { code: "HV", stats: [8, 3, 6, 2], vehicle: "TANK" },
-    striker: { code: "AS", stats: [5, 6, 7, 3], vehicle: "FIGHTER" },
-    support: { code: "RP", stats: [3, 8, 2, 9], vehicle: "HOVER" },
+    titan: { code: "HV", stats: [8, 3, 6, 2], vehicle: "TANK", wmods: [[0, 0, 2, 0], [1, -1, 4, 0], [1, 0, 3, 0]] },
+    striker: { code: "AS", stats: [5, 6, 7, 3], vehicle: "FIGHTER JET", wmods: [[0, 0, 2, 0], [0, 1, 2, 0], [0, 0, 3, 0]] },
+    support: { code: "RP", stats: [3, 7, 2, 8], vehicle: "RESCUE HELI", wmods: [[0, 0, 0, 2], [3, -1, 0, 0], [0, 0, 2, 0]] },
   };
-  const WEAPONS = [
-    { name: "CANNON", s: [1, -1, 3, 0] },
-    { name: "BEAM SABER", s: [0, 1, 2, 0] },
-    { name: "GATLING", s: [0, 0, 2, 1] },
-  ];
   const STAT_NAMES = ["ARMOR", "MOBILITY", "FIREPOWER", "SUPPORT"];
 
-  /* ---------- shaded pixel renderer: lit primitives → tone ramp → outline ---------- */
-  const MW = 72, MH = 64;
-  const LIGHT = (() => { const v = [-0.55, -0.72, 0.6]; const l = Math.hypot(...v); return v.map((c) => c / l); })();
+  /* ---------- shaded pixel renderer: lit primitives → hue-shifted ramps → outline ---------- */
+  const MW = 80, MH = 72;
+  const LIGHT = (() => { const v = [-0.55, -0.7, 0.6]; const l = Math.hypot(...v); return v.map((c) => c / l); })();
   const BAYER = [[0, 2], [3, 1]];
 
-  function shade(hex, amt) {
+  function hexToHsl(hex) {
     const n = parseInt(hex.slice(1), 16);
-    const ch = [n >> 16, (n >> 8) & 255, n & 255];
-    const f = (c) => Math.max(0, Math.min(255, Math.round(amt < 0 ? c * (1 + amt) : c + (255 - c) * amt)));
-    return "#" + ch.map((c) => f(c).toString(16).padStart(2, "0")).join("");
+    const r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+    let h = 0, s = 0;
+    if (mx !== mn) {
+      const d = mx - mn;
+      s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+      h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      h *= 60;
+    }
+    return [h, s, l];
   }
-  const ramp = (hex) => [shade(hex, -0.72), shade(hex, -0.5), shade(hex, -0.26), hex, shade(hex, 0.32), shade(hex, 0.75)];
+  function hsl(h, s, l) {
+    h = ((h % 360) + 360) % 360; s = Math.max(0, Math.min(1, s)); l = Math.max(0, Math.min(1, l));
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = l - c / 2;
+    const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+    return "#" + [r, g, b].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join("");
+  }
+  // hue-shifted ramp: shadows lean cool, highlights lean warm
+  function ramp(hex) {
+    const [h, s, l] = hexToHsl(hex);
+    const toward = (target, amt) => { let d = ((target - h + 540) % 360) - 180; return h + d * amt; };
+    return [
+      hsl(toward(245, 0.35), Math.min(1, s * 0.9 + 0.1), l * 0.24),
+      hsl(toward(245, 0.22), Math.min(1, s + 0.05), l * 0.5),
+      hsl(toward(245, 0.1), s, l * 0.75),
+      hex,
+      hsl(toward(55, 0.1), s * 0.95, l + (1 - l) * 0.35),
+      hsl(toward(55, 0.15), s * 0.7, l + (1 - l) * 0.72),
+    ];
+  }
+  function glow(hex) { return [hsl(hexToHsl(hex)[0], 0.8, 0.22), hex, hex, hex, hsl(hexToHsl(hex)[0], 0.9, 0.8), "#ffffff"]; }
 
   function materials(P) {
     return {
       m1: ramp(P.m1), m2: ramp(P.m2), m3: ramp(P.m3),
-      frame: ramp("#6d7390"), dark: ramp("#3b3f57"), gun: ramp("#8b92aa"),
-      glass: ramp(P.glass || "#4cc9f0"),
-      eye: Array(6).fill(P.eye).map((c, i) => (i === 0 ? shade(P.eye, -0.6) : i >= 4 ? shade(P.eye, 0.7) : c)),
-      beam: [shade(P.beam, -0.4), P.beam, P.beam, shade(P.beam, 0.4), shade(P.beam, 0.75), "#ffffff"],
+      frame: ramp("#646a86"), dark: ramp("#34374c"), gun: ramp("#8a91a8"),
+      glass: ramp(P.glass || "#5ad1ff"),
+      skin: ramp(P.skin || "#e3a97c"), hair: ramp(P.hair || "#39304f"),
+      cloth: ramp(P.cloth || "#2f4f9e"), trim: ramp(P.trim || "#e8b93a"),
+      iris: glow(P.iris || "#6b4a2b"),
+      eye: glow(P.eye), beam: glow(P.beam || "#ff6bd6"),
       fire: ["#b3261e", "#ff5a1f", "#ff8c1a", "#ffb020", "#ffe066", "#fff6c2"],
+      ink: ["#14111f", "#14111f", "#2a2438", "#3a3350", "#ffffff", "#ffffff"],
     };
   }
 
-  /* ---------- a layer is a grid of [material, tone] ---------- */
-  function layer() { return { px: Array.from({ length: MH }, () => Array(MW).fill(null)), flat: false }; }
+  /* ---------- layers & primitives ---------- */
+  function layer(w = MW, h = MH) { return { w, h, px: Array.from({ length: h }, () => Array(w).fill(null)) }; }
+  const FLAT = new Set(["eye", "beam", "fire", "ink", "iris"]);
   function put(L, x, y, mat, n) {
-    if (x < 0 || y < 0 || x >= MW || y >= MH) return;
-    if (mat === "eye" || mat === "beam" || mat === "fire") { L.px[y][x] = [mat, n === undefined ? 3 : n]; return; }
+    if (x < 0 || y < 0 || x >= L.w || y >= L.h) return;
+    if (FLAT.has(mat)) { L.px[y][x] = [mat, n === undefined ? 3 : n]; return; }
     let I = Math.max(0, n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]);
-    I = I * 0.9 + 0.1 + (BAYER[y & 1][x & 1] - 1.5) * 0.035;
-    const spec = n[2] > 0.55 && I > 0.97;
-    const t = spec ? 5 : I < 0.26 ? 1 : I < 0.47 ? 2 : I < 0.7 ? 3 : 4;
+    I = I * 0.88 + 0.12 + (BAYER[y & 1][x & 1] - 1.5) * 0.03;
+    const t = n[2] > 0.5 && I > 0.97 ? 5 : I < 0.28 ? 1 : I < 0.5 ? 2 : I < 0.73 ? 3 : 4;
     L.px[y][x] = [mat, t];
   }
   function ellipse(L, cx, cy, rx, ry, mat) {
@@ -621,7 +637,7 @@
         if (d <= 1) put(L, x, y, mat, [qx, qy, Math.sqrt(1 - d)]);
       }
   }
-  function poly(L, pts, mat, bev = 2.2) {
+  function poly(L, pts, mat, bev = 2.4, tilt = [0.12, -0.2]) {
     const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
     for (let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++)
       for (let x = Math.floor(Math.min(...xs)); x <= Math.ceil(Math.max(...xs)); x++) {
@@ -636,273 +652,448 @@
           if (d < best) { best = d; bn = [px - (xj + t * ex), py - (yj + t * ey)]; }
         }
         if (!inside) continue;
-        let n = [0.12, -0.18, 0.97];
+        let n = [tilt[0], tilt[1], Math.sqrt(1 - tilt[0] ** 2 - tilt[1] ** 2)];
         if (best < bev) {
           const k = (1 - best / bev) * 0.85, l = Math.hypot(bn[0], bn[1]) || 1;
-          const nx = (-bn[0] / l) * k, ny = (-bn[1] / l) * k;
+          const nx = n[0] * (1 - k) + (-bn[0] / l) * k, ny = n[1] * (1 - k) + (-bn[1] / l) * k;
           n = [nx, ny, Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny))];
         }
         put(L, x, y, mat, n);
       }
   }
+  const box = (L, x, y, w, h, mat, bev = 1.8) => poly(L, [[x, y], [x + w, y], [x + w, y + h], [x, y + h]], mat, bev);
   function line(L, x1, y1, x2, y2, mat, tone) {
     const n = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)) || 1;
     for (let i = 0; i <= n; i++) {
       const x = Math.round(x1 + ((x2 - x1) * i) / n), y = Math.round(y1 + ((y2 - y1) * i) / n);
-      if (x >= 0 && y >= 0 && x < MW && y < MH) L.px[y][x] = [mat, tone];
+      if (x >= 0 && y >= 0 && x < L.w && y < L.h) L.px[y][x] = [mat, tone];
     }
   }
-  function outlineLayer(L) {
+  function dot(L, x, y, mat, tone) { if (x >= 0 && y >= 0 && x < L.w && y < L.h) L.px[y][x] = [mat, tone]; }
+  function outlineLayer(L, skip = ["fire", "beam"]) {
     const add = [];
-    for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
+    for (let y = 0; y < L.h; y++) for (let x = 0; x < L.w; x++) {
       if (L.px[y][x]) continue;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const c = L.px[y + dy] && L.px[y + dy][x + dx];
-        if (c && c[1] !== -1 && c[0] !== "fire" && c[0] !== "beam") { add.push([x, y, c[0]]); break; }
+        if (c && c[1] !== 0 && !skip.includes(c[0])) { add.push([x, y, c[0] === "iris" || c[0] === "ink" ? "hair" : c[0]]); break; }
       }
     }
     add.forEach(([x, y, m]) => (L.px[y][x] = [m, 0]));
   }
+  function part(fn, opts = {}) { const L = layer(opts.w, opts.h); fn(L); if (opts.outline !== false) outlineLayer(L); Object.assign(L, opts); return L; }
 
-  /* ---------- weapons (anchor = hand, s = size) ---------- */
-  function weapon(kind, ax, ay, s) {
-    const L = layer();
-    if (kind === 0) { // heavy arm cannon
-      capsule(L, ax - 2, ay, ax + 26 * s, ay, 4.2 * s, "gun");
-      poly(L, [[ax + 4 * s, ay - 5.5 * s], [ax + 12 * s, ay - 5.5 * s], [ax + 12 * s, ay + 5.5 * s], [ax + 4 * s, ay + 5.5 * s]], "m3", 1.6);
-      poly(L, [[ax + 20 * s, ay - 5 * s], [ax + 23 * s, ay - 5 * s], [ax + 23 * s, ay + 5 * s], [ax + 20 * s, ay + 5 * s]], "m2", 1.2);
-      ellipse(L, ax + 26.5 * s, ay, 1.6 * s, 3 * s, "dark");
-      outlineLayer(L);
-    } else if (kind === 1) { // beam saber
-      capsule(L, ax - 1, ay + 1, ax + 5 * s, ay - 2 * s, 2.2 * s, "frame");
-      const len = 26 * s;
-      for (let i = 0; i < len; i++) {
-        const x = Math.round(ax + 5 * s + i * 0.8), y = Math.round(ay - 2 * s - i * 0.62);
-        for (let w = -2; w <= 2; w++) if (y + w >= 0 && y + w < MH && x < MW) L.px[y + w][x] = ["beam", Math.abs(w) === 2 ? 1 : Math.abs(w) === 1 ? 3 : 5];
-      }
-      outlineLayer(L);
-    } else { // gatling
-      for (const o of [-2.6, 0, 2.6]) capsule(L, ax, ay + o * s, ax + 24 * s, ay + o * s, 1.5 * s, "gun");
-      ellipse(L, ax + 2 * s, ay, 5 * s, 5.5 * s, "m2");
-      poly(L, [[ax + 18 * s, ay - 4.5 * s], [ax + 20 * s, ay - 4.5 * s], [ax + 20 * s, ay + 4.5 * s], [ax + 18 * s, ay + 4.5 * s]], "m3", 1);
-      outlineLayer(L);
-    }
-    return L;
-  }
-
-  /* ---------- class bodies (all face right) ---------- */
-  function legs(parts, def, dim) {
-    const L = layer();
-    const o = dim ? def.farLeg : 0;
-    def.leg(L, o);
-    outlineLayer(L);
-    if (dim) L.dim = true;
-    parts.push(L);
-  }
-
+  /* =========================================================
+     CLASSES — all face right
+     ========================================================= */
   const CLASSES = {
     titan: {
-      name: "TITAN", role: "HEAVY", s: 1.25, hand: [44, 41], farLeg: 9,
-      thrusters: [[8, 41], [16, 41]],
+      name: "TITAN", role: "HEAVY",
+      paints: [
+        { name: "CRIMSON", m1: "#d8323c", m2: "#4b5066", m3: "#f2b632", eye: "#ffb020" },
+        { name: "MAGMA", m1: "#8f1d27", m2: "#2d2f3d", m3: "#ff7a1a", eye: "#ff5a1f" },
+        { name: "IRONCLAD", m1: "#7d8597", m2: "#3a3f52", m3: "#e63946", eye: "#ff3b3b" },
+        { name: "ROYAL", m1: "#b3182b", m2: "#e0c341", m3: "#f4f1e8", eye: "#7df9ff" },
+      ],
+      weapons: ["GATLING", "CANNON", "HAMMER"],
+      hand: [44, 47],
       leg(L, o) {
-        capsule(L, 30 + o, 44, 27 + o, 51, 5.5, "frame");
-        poly(L, [[18 + o, 49], [36 + o, 49], [38 + o, 59], [16 + o, 59]], "m1");
-        ellipse(L, 27 + o, 50, 4.5, 4, "m2");
-        poly(L, [[11 + o, 57], [41 + o, 57], [44 + o, 63], [9 + o, 63]], "m2", 1.8);
+        ellipse(L, 34 + o, 47, 4.5, 4.5, "frame");
+        poly(L, [[28 + o, 47], [41 + o, 47], [40 + o, 55], [29 + o, 55]], "m2");
+        ellipse(L, 34 + o, 56, 4.8, 4.2, "m1");
+        poly(L, [[25 + o, 57], [43 + o, 57], [46 + o, 67], [23 + o, 67]], "m1", 2.6);
+        box(L, 27 + o, 60, 14, 2, "m3", 1);
+        poly(L, [[18 + o, 66], [48 + o, 66], [51 + o, 71], [16 + o, 71]], "m2", 1.8);
       },
-      pack(L) {
-        poly(L, [[8, 14], [26, 12], [28, 38], [6, 40]], "m2");
-        capsule(L, 8, 16, 8, 38, 4, "frame");
-        capsule(L, 16, 15, 16, 38, 4, "frame");
-        // shoulder cannon
-        poly(L, [[18, 8], [30, 8], [30, 16], [18, 16]], "dark", 1.4);
-        capsule(L, 24, 10, 62, 10, 3, "gun");
-        poly(L, [[46, 6.5], [50, 6.5], [50, 13.5], [46, 13.5]], "m3", 1);
-        ellipse(L, 62.5, 10, 1.2, 2.2, "dark");
+      back(L) {
+        box(L, 14, 12, 8, 24, "frame", 2.2);
+        box(L, 22, 8, 7, 24, "frame", 2.2);
+        box(L, 13, 10, 10, 3, "dark", 1);
+        box(L, 21, 6, 9, 3, "dark", 1);
+      },
+      farArm(L) {
+        poly(L, [[46, 17], [62, 17], [64, 30], [47, 30]], "m1", 2.6);
+        capsule(L, 56, 30, 58, 40, 3.6, "frame");
       },
       body(L) {
-        poly(L, [[18, 34], [46, 34], [48, 47], [16, 47]], "m2");
-        ellipse(L, 32, 27, 18, 15, "m1");
-        ellipse(L, 45, 27, 5, 4, "glass");
-        line(L, 20, 34, 42, 34, "m1", 1);
-        poly(L, [[22, 38], [30, 38], [30, 44], [22, 44]], "m3", 1.2);
+        poly(L, [[20, 22], [50, 19], [57, 29], [53, 45], [25, 47], [18, 35]], "m1", 3.2);
+        poly(L, [[27, 44], [49, 43], [47, 51], [29, 51]], "frame", 2);
+        for (let y = 27; y <= 37; y += 2) line(L, 42, y, 51, y - 1, "m2", 1);
+        ellipse(L, 46, 40, 2.6, 2.6, "eye");
+        box(L, 22, 36, 18, 3, "m3", 1.2);
       },
       head(L) {
-        ellipse(L, 42, 15, 8, 6, "m1");
-        poly(L, [[43, 13], [50, 13], [50, 16], [43, 16]], "dark", 1);
-        line(L, 45, 14, 49, 14, "eye", 4); line(L, 45, 15, 49, 15, "eye", 3);
-        line(L, 38, 9, 35, 3, "frame", 2);
+        poly(L, [[41, 13], [53, 12], [57, 17], [55, 23], [43, 23], [40, 18]], "m1", 2.2);
+        poly(L, [[43, 8], [41, 4], [46, 11]], "m2", 1);
+        box(L, 46, 15, 11, 3.5, "dark", 1);
+        line(L, 48, 16, 56, 16, "eye", 4); line(L, 48, 17, 56, 17, "eye", 2);
+        poly(L, [[47, 20], [56, 20], [54, 24], [48, 24]], "m2", 1.2);
+        line(L, 49, 22, 54, 22, "m2", 1);
       },
-      shoulder(L) {
-        ellipse(L, 28, 24, 11, 10, "m2");
-        poly(L, [[18, 22], [38, 22], [38, 25], [18, 25]], "m3", 1);
-        capsule(L, 30, 30, 40, 40, 4.5, "frame");
+      arm(L) {
+        poly(L, [[13, 17], [35, 14], [40, 20], [38, 32], [16, 33], [11, 25]], "m1", 3.2);
+        poly(L, [[13, 25], [39, 22], [39, 26], [13, 29]], "m3", 1.2);
+        dot(L, 17, 20, "m2", 4); dot(L, 33, 18, "m2", 4);
+        capsule(L, 27, 32, 31, 40, 4.4, "frame");
+        poly(L, [[24, 38], [41, 38], [43, 49], [26, 49]], "m1", 2.6);
+        ellipse(L, 42, 47, 4.4, 4.2, "m2");
       },
+      weapon(L, w, [ax, ay]) {
+        if (w === 0) {
+          ellipse(L, ax + 3, ay, 6, 7, "m2");
+          for (const o of [-3.2, 0, 3.2]) capsule(L, ax + 6, ay + o, ax + 32, ay + o, 1.7, "gun");
+          box(L, ax + 24, ay - 5.5, 3, 11, "m3", 1);
+          ellipse(L, ax + 3, ay, 2, 2, "m3");
+        } else if (w === 1) {
+          box(L, ax - 4, ay - 6, 18, 12, "m2", 2.4);
+          capsule(L, ax + 8, ay - 1, ax + 34, ay - 1, 4.6, "gun");
+          box(L, ax + 28, ay - 7, 7, 12, "dark", 1.4);
+          box(L, ax + 14, ay - 6.5, 3, 11, "m3", 1);
+        } else {
+          capsule(L, ax - 4, ay + 16, ax + 16, ay - 22, 1.8, "frame");
+          poly(L, [[ax + 4, ay - 36], [ax + 28, ay - 30], [ax + 25, ay - 14], [ax + 1, ay - 20]], "m2", 2.8);
+          poly(L, [[ax + 7, ay - 31], [ax + 24, ay - 27], [ax + 22, ay - 18], [ax + 5, ay - 22]], "m3", 1.6);
+          poly(L, [[ax + 27, ay - 29], [ax + 34, ay - 24], [ax + 26, ay - 17]], "gun", 1.2);
+        }
+      },
+      thrusters: [[17, 37], [25, 33]],
     },
+
     striker: {
-      name: "STRIKER", role: "ASSAULT", s: 1, hand: [42, 38], farLeg: 7,
-      thrusters: [[11, 36], [17, 36]],
+      name: "STRIKER", role: "ASSAULT",
+      paints: [
+        { name: "AZURE", m1: "#2f6fe0", m2: "#eef2fb", m3: "#ffd23f", eye: "#7dff9b", beam: "#ff6bd6" },
+        { name: "MIDNIGHT", m1: "#233478", m2: "#7b8ac4", m3: "#3ee6ff", eye: "#3ee6ff", beam: "#3ee6ff" },
+        { name: "FROST", m1: "#8fb8ff", m2: "#f7f9ff", m3: "#3a6fe0", eye: "#ffd23f", beam: "#7df9ff" },
+        { name: "VIOLET", m1: "#5b40d4", m2: "#ebe5ff", m3: "#ff5fa2", eye: "#ff5fa2", beam: "#c08bff" },
+      ],
+      weapons: ["BEAM RIFLE", "BEAM SABER", "BEAM LANCE"],
+      hand: [40, 37],
       leg(L, o) {
-        capsule(L, 31 + o, 42, 27 + o, 49, 4, "frame");
-        poly(L, [[22 + o, 47], [33 + o, 47], [37 + o, 58], [25 + o, 58]], "m1");
-        ellipse(L, 28 + o, 48, 3.5, 3.5, "m2");
-        poly(L, [[18 + o, 56], [41 + o, 56], [43 + o, 62], [16 + o, 62]], "m2", 1.6);
+        poly(L, [[31 + o, 42], [40 + o, 42], [39 + o, 51], [32 + o, 51]], "frame", 1.6);
+        poly(L, [[29 + o, 49], [40 + o, 49], [42 + o, 54], [33 + o, 57], [28 + o, 54]], "m2", 1.8);
+        poly(L, [[40 + o, 49], [45 + o, 51], [41 + o, 53]], "m2", 1);
+        poly(L, [[29 + o, 56], [41 + o, 56], [43 + o, 66], [31 + o, 66]], "m1", 2.2);
+        line(L, 35 + o, 58, 36 + o, 64, "m2", 3);
+        poly(L, [[27 + o, 65], [45 + o, 65], [49 + o, 71], [25 + o, 71]], "m2", 1.6);
+        box(L, 25 + o, 69, 6, 2, "m3", 0.8);
       },
-      pack(L) {
-        poly(L, [[12, 14], [24, 13], [25, 32], [11, 33]], "m2");
-        capsule(L, 11, 15, 11, 32, 3.2, "frame");
-        capsule(L, 17, 14, 17, 32, 3.2, "frame");
-        capsule(L, 20, 12, 36, 7, 2.2, "gun");
-        poly(L, [[18, 9], [24, 9], [24, 15], [18, 15]], "m3", 1.2);
+      back(L) {
+        poly(L, [[25, 22], [3, 4], [7, 2], [29, 17]], "m2", 1.8);
+        poly(L, [[3, 4], [7, 2], [10, 5], [6, 7]], "m3", 0.8);
+        poly(L, [[23, 26], [1, 18], [3, 14], [27, 22]], "m1", 1.8);
+        capsule(L, 21, 26, 17, 35, 3.2, "frame");
+      },
+      farArm(L) {
+        poly(L, [[42, 17], [53, 17], [55, 25], [43, 26]], "m2", 2);
+        capsule(L, 50, 25, 52, 33, 2.8, "frame");
       },
       body(L) {
-        poly(L, [[23, 34], [40, 34], [41, 43], [22, 43]], "frame");
-        ellipse(L, 32, 27, 13, 11, "m1");
-        line(L, 23, 31, 40, 31, "m1", 1);
-        poly(L, [[28, 34], [34, 34], [34, 41], [28, 41]], "m3", 1);
+        poly(L, [[29, 34], [43, 34], [42, 41], [30, 41]], "frame", 1.6);
+        poly(L, [[24, 20], [46, 18], [51, 26], [47, 35], [28, 37], [22, 28]], "m1", 3);
+        poly(L, [[30, 17], [44, 16], [47, 21], [31, 22]], "m2", 1.6);
+        box(L, 40, 23, 7, 4, "m3", 1);
+        line(L, 41, 24, 46, 24, "m3", 1); line(L, 41, 26, 46, 26, "m3", 1);
+        poly(L, [[26, 38], [37, 38], [36, 47], [27, 45]], "m2", 1.6);
+        poly(L, [[36, 38], [44, 38], [43, 44], [37, 46]], "m3", 1.2);
       },
       head(L) {
-        ellipse(L, 37, 15, 8.5, 7.5, "m1");
-        poly(L, [[39, 13], [46, 13], [46, 17], [39, 17]], "dark", 1);
-        line(L, 41, 14, 45, 14, "eye", 4); line(L, 41, 15, 45, 16, "eye", 3);
-        poly(L, [[30, 5], [34, 9], [31, 10]], "m3", 0.8);
+        poly(L, [[39, 8], [49, 7], [53, 12], [51, 18], [41, 18], [38, 12]], "m2", 2);
+        poly(L, [[44, 8], [34, 0], [37, 0], [46, 6]], "m3", 0.9);
+        poly(L, [[46, 7], [55, 0], [57, 2], [48, 8]], "m3", 0.9);
+        poly(L, [[45, 5], [48, 5], [47, 9]], "m1", 0.6);
+        box(L, 45, 10.5, 7.5, 3, "dark", 0.8);
+        line(L, 46, 11, 48, 12, "eye", 4); line(L, 50, 12, 52, 11, "eye", 4);
+        poly(L, [[46, 14], [52, 14], [51, 18.5], [47, 18.5]], "m2", 1);
+        line(L, 48, 15, 48, 17, "m2", 1); line(L, 50, 15, 50, 17, "m2", 1);
+        box(L, 47, 18, 4, 1.6, "m1", 0.6);
       },
-      shoulder(L) {
-        ellipse(L, 28, 24, 8.5, 7.5, "m2");
-        poly(L, [[20, 23], [36, 23], [36, 25], [20, 25]], "m3", 1);
-        capsule(L, 29, 28, 34, 36, 3.2, "frame");
-        capsule(L, 34, 37, 41, 38, 4, "m1");
+      arm(L) {
+        poly(L, [[17, 16], [33, 15], [36, 23], [21, 26], [15, 21]], "m2", 2.4);
+        poly(L, [[17, 20], [35, 19], [35, 21], [17, 23]], "m1", 1);
+        capsule(L, 27, 25, 30, 32, 3, "frame");
+        poly(L, [[25, 31], [38, 31], [39, 39], [27, 39]], "m1", 2);
+        ellipse(L, 40, 37, 3, 3, "frame");
       },
+      weapon(L, w, [ax, ay]) {
+        if (w === 0) {
+          poly(L, [[ax - 6, ay - 4], [ax + 26, ay - 3], [ax + 26, ay + 2], [ax - 6, ay + 3]], "gun", 1.6);
+          capsule(L, ax + 24, ay - 1, ax + 38, ay - 1, 1.4, "gun");
+          box(L, ax + 6, ay - 8, 10, 4, "m2", 1);
+          dot(L, ax + 14, ay - 7, "eye", 4);
+          box(L, ax - 2, ay + 2, 3, 5, "gun", 0.8);
+          box(L, ax + 16, ay - 4, 2, 6, "m3", 0.6);
+        } else if (w === 1) {
+          capsule(L, ax - 1, ay + 2, ax + 5, ay - 3, 1.8, "frame");
+          for (let i = 0; i < 30; i++) {
+            const x = Math.round(ax + 5 + i * 0.75), y = Math.round(ay - 3 - i * 0.66);
+            for (let k = -2; k <= 2; k++) dot(L, x, y + k, "beam", Math.abs(k) === 2 ? 1 : Math.abs(k) === 1 ? 3 : 5);
+          }
+        } else {
+          capsule(L, ax - 14, ay + 14, ax + 26, ay - 20, 1.3, "frame");
+          poly(L, [[ax + 20, ay - 18], [ax + 26, ay - 24], [ax + 24, ay - 14]], "m3", 0.8);
+          for (let i = 0; i < 12; i++) {
+            const x = Math.round(ax + 26 + i * 0.75), y = Math.round(ay - 21 - i * 0.66), wdt = i < 8 ? 2 : 1;
+            for (let k = -wdt; k <= wdt; k++) dot(L, x, y + k, "beam", Math.abs(k) === wdt ? 2 : 5);
+          }
+        }
+      },
+      thrusters: [[18, 37]],
     },
+
     support: {
-      name: "SUPPORT", role: "REPAIR", s: 0.78, hand: [42, 34], farLeg: 6,
-      thrusters: [[24, 33]],
+      name: "SUPPORT", role: "REPAIR",
+      paints: [
+        { name: "AMBER", m1: "#f2c12e", m2: "#4a4e63", m3: "#262838", eye: "#6bff8a", beam: "#9dff6b" },
+        { name: "HAZARD", m1: "#ffd21f", m2: "#22242f", m3: "#ff7b00", eye: "#ff4d4d", beam: "#ffb020" },
+        { name: "CITRUS", m1: "#c9e04a", m2: "#3f5a2d", m3: "#f4f1e8", eye: "#3ee6ff", beam: "#3ee6ff" },
+        { name: "DESERT", m1: "#e2b36f", m2: "#76593a", m3: "#2f6fe0", eye: "#7df9ff", beam: "#7df9ff" },
+      ],
+      weapons: ["REPAIR ARM", "SHIELD", "FLARE GUN"],
+      hand: [41, 39],
       leg(L, o) {
-        capsule(L, 33 + o, 35, 30 + o, 46, 2.6, "frame");
-        capsule(L, 30 + o, 46, 34 + o, 57, 3.2, "m1");
-        ellipse(L, 30 + o, 46, 3, 3, "m2");
-        poly(L, [[26 + o, 57], [42 + o, 57], [43 + o, 62], [25 + o, 62]], "m2", 1.4);
+        ellipse(L, 36 + o, 45, 3.2, 3.2, "frame");
+        capsule(L, 36 + o, 45, 33 + o, 54, 2.3, "frame");
+        ellipse(L, 33 + o, 55, 3.4, 3.4, "m1");
+        capsule(L, 33 + o, 56, 36 + o, 64, 3, "m1");
+        poly(L, [[27 + o, 64], [45 + o, 64], [48 + o, 71], [25 + o, 71]], "m2", 1.6);
+        for (let x = 28; x < 46; x += 4) line(L, x + o, 70, x + 2 + o, 65, "m1", 3);
       },
-      pack(L) {
-        poly(L, [[21, 17], [28, 16], [29, 31], [20, 32]], "m2");
-        capsule(L, 24, 18, 24, 31, 2.6, "frame");
-        line(L, 30, 12, 24, 2, "frame", 2); line(L, 31, 12, 25, 2, "frame", 3);
-        ellipse(L, 22, 3, 5, 2.2, "m3");
+      back(L) {
+        box(L, 16, 20, 11, 17, "m2", 2);
+        capsule(L, 22, 21, 36, 5, 2, "m1");
+        ellipse(L, 22, 21, 2.8, 2.8, "frame");
+        ellipse(L, 36, 5, 2.4, 2.4, "frame");
+        poly(L, [[36, 5], [44, 6], [45, 10], [42, 9], [41, 12], [38, 9]], "gun", 0.9);
+        ellipse(L, 12, 17, 3, 7.5, "frame");
+        ellipse(L, 12.6, 17, 1.4, 3.4, "m3");
+        dot(L, 12, 17, "eye", 5);
+      },
+      farArm(L) {
+        ellipse(L, 44, 25, 4.2, 4.2, "m2");
+        capsule(L, 45, 28, 47, 35, 2.2, "frame");
       },
       body(L) {
-        ellipse(L, 34, 25, 9, 9.5, "m1");
-        poly(L, [[29, 31], [39, 31], [38, 36], [30, 36]], "frame", 1.2);
-        ellipse(L, 38, 24, 3, 3, "glass");
+        ellipse(L, 34, 31, 11.5, 10.5, "m1");
+        poly(L, [[24, 35], [45, 35], [43, 40], [26, 40]], "m3", 1);
+        for (let x = 25; x < 44; x += 4) line(L, x, 40, x + 3, 35, "m1", 3);
+        ellipse(L, 40, 27, 3.2, 3.2, "glass");
+        poly(L, [[29, 40], [40, 40], [39, 45], [30, 45]], "frame", 1.2);
       },
       head(L) {
-        ellipse(L, 38, 14, 6, 5, "m1");
-        poly(L, [[39, 12], [45, 12], [45, 15], [39, 15]], "dark", 1);
-        line(L, 41, 13, 44, 13, "eye", 4);
+        ellipse(L, 40, 16, 7.5, 6.5, "m1");
+        box(L, 36, 15, 12.5, 4, "dark", 0.8);
+        ellipse(L, 45, 17, 2.4, 2.4, "eye");
+        dot(L, 44, 16, "eye", 5);
+        line(L, 38, 10, 35, 2, "frame", 2);
+        ellipse(L, 35, 2, 1.6, 1.6, "m3");
+        ellipse(L, 34, 17, 2.2, 3.8, "m2");
       },
-      shoulder(L) {
-        ellipse(L, 31, 22, 5.5, 5, "m2");
-        line(L, 27, 22, 35, 22, "m3", 3);
-        capsule(L, 32, 25, 35, 33, 2.2, "frame");
-        capsule(L, 35, 34, 41, 34, 2.6, "m1");
+      arm(L) {
+        ellipse(L, 29, 26, 5.2, 5, "m2");
+        line(L, 25, 26, 33, 26, "m1", 3);
+        capsule(L, 30, 30, 33, 37, 2.2, "frame");
+        capsule(L, 33, 38, 39, 38, 2.8, "m1");
+        ellipse(L, 41, 39, 2.6, 2.6, "frame");
       },
+      weapon(L, w, [ax, ay]) {
+        if (w === 0) {
+          capsule(L, ax, ay, ax + 12, ay - 5, 2, "frame");
+          poly(L, [[ax + 10, ay - 11], [ax + 19, ay - 10], [ax + 19, ay - 6], [ax + 15, ay - 7], [ax + 15, ay - 3], [ax + 19, ay - 2], [ax + 19, ay + 2], [ax + 10, ay + 1]], "m1", 1.2);
+          dot(L, ax + 21, ay - 4, "beam", 5); dot(L, ax + 22, ay - 6, "beam", 3); dot(L, ax + 22, ay - 2, "beam", 3);
+        } else if (w === 1) {
+          poly(L, [[ax - 2, ay - 16], [ax + 13, ay - 18], [ax + 15, ay + 2], [ax + 7, ay + 12], [ax - 1, ay + 7]], "m2", 2.6);
+          poly(L, [[ax + 1, ay - 13], [ax + 11, ay - 14], [ax + 12, ay + 1], [ax + 6, ay + 8], [ax + 1, ay + 4]], "m1", 1.8);
+          box(L, ax + 5, ay - 9, 2.5, 11, "m3", 0.6); box(L, ax + 2, ay - 5, 9, 2.5, "m3", 0.6);
+        } else {
+          capsule(L, ax - 2, ay - 1, ax + 22, ay - 5, 3.2, "m2");
+          ellipse(L, ax + 22.5, ay - 5, 1.6, 3, "dark");
+          box(L, ax + 8, ay - 7, 3, 7, "m1", 0.8);
+          capsule(L, ax + 3, ay + 1, ax + 3, ay + 7, 1.4, "gun");
+        }
+      },
+      thrusters: [[21, 38]],
     },
   };
   const CLASS_KEYS = ["titan", "striker", "support"];
+  const HOSTILE = { name: "HOSTILE", m1: "#8d929e", m2: "#5b1f2e", m3: "#ff3b3b", eye: "#ff3b3b", beam: "#ff3b3b" };
 
-  function mechParts(cls, weaponKind) {
-    const def = CLASSES[cls];
-    const parts = [];
-    legs(parts, def, true);
-    const pack = layer(); def.pack(pack); outlineLayer(pack); parts.push(pack);
-    const body = layer(); def.body(body); outlineLayer(body); parts.push(body);
-    const head = layer(); def.head(head); outlineLayer(head); parts.push(head);
-    legs(parts, def, false);
-    const sh = layer(); def.shoulder(sh); outlineLayer(sh); parts.push(sh);
-    parts.push(weapon(weaponKind, def.hand[0], def.hand[1], def.s));
-    const fl = layer();
-    def.thrusters.forEach(([x, y]) => {
-      for (let i = 0; i < 7; i++) for (let w = -2; w <= 2; w++) {
-        if (Math.abs(w) > 2 - i / 4) continue;
-        const t = i < 2 ? 5 : i < 4 ? 4 : i < 6 ? 2 : 1;
-        if (y + i < MH) fl.px[y + i][x + w] = ["fire", t];
-      }
-    });
-    fl.flame = true;
-    parts.push(fl);
-    return parts;
+  function mechParts(cls, w) {
+    const d = CLASSES[cls];
+    const P = [];
+    P.push(part((L) => d.leg(L, 8), { dim: 1 }));
+    P.push(part((L) => d.farArm(L), { dim: 1 }));
+    P.push(part((L) => d.back(L)));
+    P.push(part((L) => d.body(L)));
+    P.push(part((L) => d.leg(L, 0)));
+    P.push(part((L) => d.head(L)));
+    if (!(cls === "titan" && w === 2)) {
+      P.push(part((L) => d.arm(L)));
+      P.push(part((L) => d.weapon(L, w, d.hand)));
+    } else {
+      P.push(part((L) => d.weapon(L, w, d.hand)));
+      P.push(part((L) => d.arm(L)));
+    }
+    P.push(part((L) => {
+      d.thrusters.forEach(([x, y]) => {
+        for (let i = 0; i < 8; i++) for (let k = -2; k <= 2; k++) {
+          if (Math.abs(k) > 2 - i / 4) continue;
+          dot(L, x + k, y + i, "fire", i < 2 ? 5 : i < 4 ? 4 : i < 6 ? 2 : 1);
+        }
+      });
+    }, { outline: false, flame: true }));
+    return P;
   }
 
   function vehicleParts(cls) {
     const P = [];
-    const mk = (fn) => { const L = layer(); fn(L); outlineLayer(L); P.push(L); return L; };
-    let fl = layer();
-    if (cls === "titan") { // tank
-      mk((L) => { capsule(L, 10, 54, 60, 54, 7, "dark"); for (let x = 12; x <= 58; x += 9) ellipse(L, x, 54, 3.4, 3.4, "frame"); });
-      mk((L) => { poly(L, [[8, 38], [58, 38], [66, 48], [4, 48]], "m1"); poly(L, [[12, 44], [56, 44], [56, 46], [12, 46]], "m3", 1); });
-      mk((L) => { ellipse(L, 32, 34, 14, 8, "m2"); ellipse(L, 38, 32, 3, 2, "glass"); });
-      mk((L) => { capsule(L, 40, 32, 70, 31, 2.6, "gun"); poly(L, [[58, 28], [62, 28], [62, 35], [58, 35]], "m3", 1); });
-      mk((L) => { capsule(L, 20, 30, 30, 24, 1.6, "gun"); });
-      for (let i = 0; i < 4; i++) for (let w = -1; w <= 1; w++) fl.px[42 + w][3 - i] = ["fire", 4 - i];
-    } else if (cls === "striker") { // jet
-      mk((L) => { poly(L, [[8, 30], [18, 30], [12, 14], [5, 14]], "m2"); });
-      mk((L) => { capsule(L, 5, 34, 12, 34, 5, "frame"); });
-      mk((L) => { poly(L, [[22, 36], [46, 36], [34, 54], [14, 54]], "m2"); poly(L, [[14, 52], [22, 52], [22, 54], [14, 54]], "m3", 1); });
-      mk((L) => { capsule(L, 9, 34, 58, 34, 6.2, "m1"); line(L, 14, 36, 56, 36, "m3", 3); });
-      mk((L) => { poly(L, [[56, 29], [71, 34], [56, 39]], "m2", 1.8); });
-      mk((L) => { ellipse(L, 46, 29.5, 8, 3.4, "glass"); });
-      for (let i = 0; i < 6; i++) for (let w = -2; w <= 2; w++) if (Math.abs(w) <= 2 - i / 3) fl.px[34 + w][0 + (5 - i)] = ["fire", i < 2 ? 1 : i < 4 ? 3 : 5];
-    } else { // hover bike
-      mk((L) => { ellipse(L, 20, 50, 9, 3, "frame"); ellipse(L, 52, 50, 9, 3, "frame"); });
-      mk((L) => { capsule(L, 14, 41, 54, 41, 6, "m1"); line(L, 18, 43, 50, 43, "m3", 3); });
-      mk((L) => { ellipse(L, 57, 38, 9, 6.5, "m2"); ellipse(L, 60, 37, 3, 2, "glass"); });
-      mk((L) => { ellipse(L, 34, 33, 8, 4.5, "glass"); line(L, 26, 34, 20, 22, "frame", 2); ellipse(L, 19, 21, 4, 1.8, "m3"); });
-      for (const cx of [20, 52]) for (let w = -6; w <= 6; w++) { fl.px[54][cx + w] = ["beam", 4]; if (Math.abs(w) < 4) fl.px[55][cx + w] = ["beam", 2]; }
+    if (cls === "titan") { // heavy tank
+      P.push(part((L) => { capsule(L, 10, 60, 66, 60, 8, "dark"); for (let x = 13; x <= 63; x += 10) ellipse(L, x, 60, 4, 4, "frame"); for (let x = 8; x < 70; x += 3) dot(L, x, 52, "frame", 4); }));
+      P.push(part((L) => { poly(L, [[6, 42], [66, 42], [74, 52], [4, 53]], "m1", 2.6); box(L, 8, 47, 58, 3, "m3", 1); }));
+      P.push(part((L) => { poly(L, [[22, 30], [48, 28], [54, 36], [52, 43], [20, 43]], "m1", 3); box(L, 26, 31, 8, 4, "m2", 1); dot(L, 44, 33, "eye", 4); dot(L, 45, 33, "eye", 3); }));
+      P.push(part((L) => { capsule(L, 48, 34, 79, 33, 2.8, "gun"); box(L, 66, 30, 5, 7, "m2", 1); box(L, 76, 30, 4, 7, "dark", 0.8); }));
+      P.push(part((L) => { capsule(L, 24, 28, 34, 22, 1.6, "gun"); box(L, 30, 25, 6, 4, "m2", 1); }));
+      P.push(part((L) => { for (let i = 0; i < 4; i++) for (let k = -1; k <= 1; k++) dot(L, 3 - i, 46 + k, "fire", 4 - i); }, { outline: false, flame: true }));
+    } else if (cls === "striker") { // jet fighter
+      P.push(part((L) => { poly(L, [[8, 34], [22, 34], [14, 14], [6, 14]], "m1", 1.8); poly(L, [[6, 14], [14, 14], [15, 18], [7, 18]], "m3", 0.8); }, { dim: 1 }));
+      P.push(part((L) => { poly(L, [[26, 40], [52, 40], [36, 64], [16, 64]], "m1", 2.2); poly(L, [[16, 61], [26, 61], [25, 64], [16, 64]], "m3", 0.8); }));
+      P.push(part((L) => { capsule(L, 8, 38, 64, 38, 6.4, "m2"); line(L, 12, 41, 60, 41, "m1", 2); poly(L, [[18, 35], [42, 34], [42, 36], [18, 37]], "m1", 1); }));
+      P.push(part((L) => { poly(L, [[62, 33], [79, 38], [62, 43]], "m1", 1.8); }));
+      P.push(part((L) => { ellipse(L, 50, 33.5, 9, 3.6, "glass"); }));
+      P.push(part((L) => { poly(L, [[10, 36], [24, 36], [16, 18], [9, 18]], "m1", 1.8); poly(L, [[9, 18], [16, 18], [17, 22], [10, 22]], "m3", 0.8); capsule(L, 4, 38, 11, 38, 5, "frame"); }));
+      P.push(part((L) => { for (let i = 0; i < 7; i++) for (let k = -2; k <= 2; k++) if (Math.abs(k) <= 2 - i / 3.5) dot(L, 5 - i, 38 + k, "fire", i < 2 ? 5 : i < 4 ? 3 : 1); }, { outline: false, flame: true }));
+    } else { // rescue helicopter
+      P.push(part((L) => { capsule(L, 6, 34, 34, 38, 2.4, "m1"); poly(L, [[2, 26], [8, 26], [9, 36], [4, 36]], "m2", 1.2); }));
+      P.push(part((L) => { ellipse(L, 5, 28, 1.3, 6, "frame"); }, { rotorV: true }));
+      P.push(part((L) => { capsule(L, 34, 60, 66, 60, 1.3, "frame"); line(L, 42, 52, 40, 59, "frame", 2); line(L, 58, 52, 60, 59, "frame", 2); }));
+      P.push(part((L) => { poly(L, [[30, 32], [56, 30], [70, 38], [68, 50], [58, 54], [34, 54], [28, 44]], "m1", 3.4); poly(L, [[32, 46], [66, 46], [64, 50], [34, 50]], "m3", 1); for (let x = 34; x < 64; x += 5) line(L, x, 50, x + 3, 46, "m1", 3); }));
+      P.push(part((L) => { poly(L, [[56, 32], [66, 34], [71, 42], [58, 42]], "glass", 1.8); box(L, 40, 36, 8, 7, "glass", 1); }));
+      P.push(part((L) => { box(L, 44, 24, 10, 6, "m2", 1.4); capsule(L, 49, 22, 49, 26, 1.3, "frame"); }));
+      P.push(part((L) => { capsule(L, 18, 20, 80, 20, 1, "dark"); }, { rotor: true }));
     }
-    fl.flame = true;
-    P.push(fl);
+    return P;
+  }
+
+  /* =========================================================
+     PORTRAIT — bust, facing left, GBA-tactics style
+     ========================================================= */
+  const PORTRAIT = { skin: "#e2a77b", hair: "#2c2842", cloth: "#2d4c9c", trim: "#e8b93a", iris: "#7a4b2a", m1: "#e05a2b", m2: "#f1f3f9", m3: "#e8b93a", eye: "#7df9ff" };
+  function portraitParts() {
+    const W = 64, H = 64, P = [];
+    const mk = (fn, o = {}) => P.push(part(fn, { w: W, h: H, ...o }));
+    // hair behind the head
+    mk((L) => {
+      poly(L, [[36, 14], [50, 18], [54, 30], [52, 42], [46, 44], [40, 24]], "hair", 3);
+      poly(L, [[46, 22], [58, 30], [50, 34]], "hair", 1.6);
+      poly(L, [[48, 32], [57, 42], [49, 42]], "hair", 1.6);
+    });
+    // body: jacket, collar, pauldron
+    mk((L) => {
+      poly(L, [[2, 64], [6, 52], [18, 46], [44, 46], [58, 52], [63, 64]], "cloth", 3);
+      poly(L, [[22, 45], [40, 45], [42, 52], [31, 58], [20, 52]], "m1", 2);
+      poly(L, [[26, 47], [36, 47], [31, 55]], "m2", 1.4);
+      poly(L, [[3, 58], [8, 49], [20, 46], [22, 54], [12, 60]], "trim", 2.2);
+      poly(L, [[44, 47], [58, 52], [60, 58], [46, 55]], "trim", 1.8, [0.3, -0.1]);
+      line(L, 31, 55, 31, 64, "cloth", 1);
+    });
+    // neck + face + ear
+    mk((L) => {
+      poly(L, [[27, 36], [37, 36], [37, 47], [31, 50], [26, 46]], "skin", 2, [0.4, 0.1]);
+      poly(L, [[20, 20], [42, 17], [46, 28], [44, 37], [37, 44], [30, 45], [24, 40], [19, 30]], "skin", 3);
+      ellipse(L, 44, 30, 2.6, 4, "skin");
+      // brows
+      line(L, 21, 23, 27, 22, "hair", 1); line(L, 21, 24, 26, 23, "hair", 2);
+      line(L, 31, 22, 37, 23, "hair", 1); line(L, 32, 23, 37, 24, "hair", 2);
+      // eyes: heavy top lash, white, two-tone iris, highlight
+      const eye = (x0, narrow) => {
+        line(L, x0, 26, x0 + 5, 26, "ink", 0); dot(L, x0 - 1, 27, "ink", 0); dot(L, x0 + 6, 27, "ink", 0);
+        for (let y = 27; y <= 29; y++) for (let x = x0; x <= x0 + 5; x++) dot(L, x, y, "ink", 4);
+        const ix = narrow ? x0 + 1 : x0 + 2;
+        for (let y = 27; y <= 29; y++) for (let x = ix; x <= ix + 2; x++) dot(L, x, y, "iris", y === 27 ? 0 : y === 28 ? 1 : 4);
+        dot(L, ix, 27, "ink", 0); dot(L, ix + 1, 28, "ink", 5);
+        line(L, x0, 30, x0 + 5, 30, "skin", 2);
+      };
+      eye(21, false); eye(31, true);
+      // nose + mouth
+      dot(L, 27, 33, "skin", 2); dot(L, 27, 34, "skin", 2); dot(L, 28, 35, "skin", 1);
+      line(L, 27, 39, 31, 39, "skin", 1); dot(L, 32, 38, "skin", 1);
+      // shading: hair shadow on the forehead, far-side jaw, under the chin
+      const shadeSkin = (fn, tone) => { for (let y = 0; y < L.h; y++) for (let x = 0; x < L.w; x++) { const p = L.px[y][x]; if (p && p[0] === "skin" && fn(x, y)) p[1] = Math.min(p[1], tone); } };
+      shadeSkin((x, y) => y >= 19 && y <= 22, 2);
+      shadeSkin((x, y) => x >= 38 && y >= 31 && x - 38 > (40 - y) * 0.4, 2);
+      shadeSkin((x, y) => y >= 42, 1);
+      shadeSkin((x, y) => y >= 36 && y <= 47 && x >= 26 && x <= 37 && y > 43, 1);
+      // cheek blush
+      dot(L, 22, 34, "skin", 4); dot(L, 36, 34, "skin", 4);
+    });
+    // headset
+    mk((L) => {
+      ellipse(L, 45, 30, 3.2, 4.4, "m1");
+    });
+    // front hair: fringe + spikes
+    mk((L) => {
+      ellipse(L, 32, 16, 15, 10, "hair");
+      poly(L, [[15, 22], [22, 12], [27, 26]], "hair", 1.6);
+      poly(L, [[21, 15], [30, 11], [29, 26]], "hair", 1.6);
+      poly(L, [[27, 14], [37, 11], [34, 25]], "hair", 1.6);
+      poly(L, [[34, 13], [44, 14], [40, 24]], "hair", 1.6);
+      poly(L, [[18, 11], [22, 1], [29, 9]], "hair", 1.4);
+      poly(L, [[28, 8], [38, 0], [40, 9]], "hair", 1.4);
+      poly(L, [[38, 9], [50, 6], [46, 16]], "hair", 1.4);
+      poly(L, [[14, 16], [9, 12], [18, 12]], "hair", 1.2);
+      line(L, 23, 9, 31, 7, "hair", 5); line(L, 20, 13, 26, 11, "hair", 4);
+    });
     return P;
   }
 
   function paintLayerCanvas(L, mats, scale) {
     const c = document.createElement("canvas");
-    c.width = MW * scale; c.height = MH * scale;
+    c.width = L.w * scale; c.height = L.h * scale;
     const ctx = c.getContext("2d");
-    let minX = MW, minY = MH, maxX = 0, maxY = 0;
-    for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
+    let minX = L.w, minY = L.h, maxX = 0, maxY = 0;
+    for (let y = 0; y < L.h; y++) for (let x = 0; x < L.w; x++) {
       const p = L.px[y][x];
       if (!p) continue;
       let t = p[1];
-      if (L.dim && t > 0) t = Math.max(1, t - 1);
+      if (L.dim && t > 0 && !FLAT.has(p[0])) t = Math.max(1, t - 1);
       ctx.fillStyle = mats[p[0]][t];
       ctx.fillRect(x * scale, y * scale, scale, scale);
       minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
     }
-    c.className = "part" + (L.flame ? " flame" : "");
-    c.style.transformOrigin = `${((minX + maxX + 1) / 2 / MW) * 100}% ${((minY + maxY + 1) / 2 / MH) * 100}%`;
+    c.className = "part" + (L.flame ? " flame" : "") + (L.rotor ? " rotor" : "") + (L.rotorV ? " rotor-v" : "");
+    c.style.transformOrigin = `${((minX + maxX + 1) / 2 / L.w) * 100}% ${((minY + maxY + 1) / 2 / L.h) * 100}%`;
     return c;
   }
 
-  function buildUnit(kind, cls, weaponKind, P, scale = 4) {
+  function buildUnit(kind, cls, w, P, scale = 4) {
     const wrap = document.createElement("div");
     wrap.className = "punit " + (kind === "vehicle" ? "pveh" : "pmech");
     const mats = materials(P);
-    (kind === "vehicle" ? vehicleParts(cls) : mechParts(cls, weaponKind)).forEach((L) => wrap.appendChild(paintLayerCanvas(L, mats, scale)));
+    (kind === "vehicle" ? vehicleParts(cls) : mechParts(cls, w)).forEach((L) => wrap.appendChild(paintLayerCanvas(L, mats, scale)));
     return wrap;
   }
+  function buildPortrait(scale = 2) {
+    const c = document.createElement("canvas");
+    c.width = 64 * scale; c.height = 64 * scale;
+    const ctx = c.getContext("2d");
+    const mats = materials(PORTRAIT);
+    portraitParts().forEach((L) => ctx.drawImage(paintLayerCanvas(L, mats, scale), 0, 0));
+    c.className = "portrait";
+    return c;
+  }
 
-  const saved = store.get("kd3-mech", {}) || {};
-  const cfg = {
-    cls: CLASS_KEYS.includes(saved.cls) ? saved.cls : "striker",
-    paint: PAINTS[saved.paint] ? saved.paint : 0,
-    weapon: WEAPONS[saved.weapon] ? saved.weapon : 0,
-  };
+  const saved = store.get("kd4-mech", {}) || {};
+  const cfg = { cls: CLASS_KEYS.includes(saved.cls) ? saved.cls : "striker", paint: 0, weapon: 0 };
+  if (CLASSES[cfg.cls].paints[saved.paint]) cfg.paint = saved.paint;
+  if (CLASSES[cfg.cls].weapons[saved.weapon]) cfg.weapon = saved.weapon;
+  const paintOf = (c = cfg) => CLASSES[c.cls].paints[c.paint];
 
   function unitName(c = cfg) {
     const num = String(CLASS_KEYS.indexOf(c.cls) * 3 + c.weapon + 1).padStart(2, "0");
     return `${CLASS_INFO[c.cls].code}-${num} ${CLASSES[c.cls].name}`;
   }
-  const mechEl = (c = cfg, scale = 4) => buildUnit("mech", c.cls, c.weapon, PAINTS[c.paint], scale);
-  const vehEl = (c = cfg, scale = 4) => buildUnit("vehicle", c.cls, c.weapon, PAINTS[c.paint], scale);
+  const mechEl = (c = cfg, scale = 4) => buildUnit("mech", c.cls, c.weapon, paintOf(c), scale);
+  const vehEl = (c = cfg, scale = 4) => buildUnit("vehicle", c.cls, c.weapon, paintOf(c), scale);
 
   // one flattened canvas per unit look, for small uses (quest cards, tactics board)
   const unitCache = new Map();
@@ -934,10 +1125,11 @@
   let hangarBusy = false;
 
   function buildOptions() {
+    const d = CLASSES[cfg.cls];
     const groups = {
-      cls: CLASS_KEYS.map((k) => ({ value: k, name: CLASSES[k].name, sub: CLASSES[k].role })),
-      paint: PAINTS.map((p, i) => ({ ...p, value: i })),
-      weapon: WEAPONS.map((w, i) => ({ ...w, value: i })),
+      cls: CLASS_KEYS.map((k) => ({ value: k, name: CLASSES[k].name, sub: CLASSES[k].role, color: CLASSES[k].paints[0].m1 })),
+      paint: d.paints.map((p, i) => ({ ...p, value: i })),
+      weapon: d.weapons.map((name, i) => ({ name, value: i })),
     };
     document.querySelectorAll(".opt-row").forEach((row) => {
       const key = row.dataset.opt;
@@ -954,37 +1146,40 @@
           b.style.setProperty("--c", opt.m3);
         } else {
           b.className = "opt-btn" + (opt.sub ? " opt-class" : "");
+          if (opt.color) b.style.setProperty("--cc", opt.color);
           b.innerHTML = opt.sub ? `${opt.name}<small>${opt.sub}</small>` : opt.name;
         }
         b.addEventListener("click", () => {
           if (hangarBusy || cfg[key] === opt.value) return;
           cfg[key] = opt.value;
-          row.querySelectorAll("button").forEach((x, j) => x.setAttribute("aria-pressed", String(groups[key][j].value === opt.value)));
+          if (key === "cls") { cfg.paint = 0; cfg.weapon = 0; }
           blip([660, 990], 0.04);
+          buildOptions();
           renderUnit(true);
           once("hangar-custom", () => addExp(40));
         });
         row.appendChild(b);
       });
     });
+    $("paintName").textContent = paintOf().name;
   }
 
   function renderStats() {
-    const base = CLASS_INFO[cfg.cls].stats, w = WEAPONS[cfg.weapon].s;
+    const base = CLASS_INFO[cfg.cls].stats, w = CLASS_INFO[cfg.cls].wmods[cfg.weapon];
     $("stats").innerHTML = STAT_NAMES.map((n, i) => {
       const v = Math.max(0, Math.min(10, base[i] + w[i]));
       return `<div class="stat"><span>${n}</span><span class="stat-bar">${Array.from({ length: 10 }, (_, k) => `<i class="${k < v ? "on" : ""}"></i>`).join("")}</span><b>${v}</b></div>`;
     }).join("");
   }
 
-  const modeName = () => (vehicleMode ? CLASS_INFO[cfg.cls].vehicle + " MODE" : CLASSES[cfg.cls].role + " MECH");
+  const modeName = () => (vehicleMode ? CLASS_INFO[cfg.cls].vehicle : CLASSES[cfg.cls].role + " MECH");
   function renderUnit(animate) {
     bayUnit.replaceChildren(mechEl(), vehEl());
     heroMech.replaceChildren(mechEl(cfg, 5));
     $("unitName").textContent = unitName();
     $("unitMode").textContent = modeName();
     renderStats();
-    store.set("kd3-mech", cfg);
+    store.set("kd4-mech", cfg);
     if (animate) assemble(bayUnit.querySelector(vehicleMode ? ".pveh" : ".pmech"));
   }
 
@@ -1113,7 +1308,7 @@
       : `<li class="muted">Empty. Go carve something.</li>`;
   }
 
-  const UNIT_BASE_WEAPON = { titan: 0, striker: 2, support: 1 };
+  const UNIT_BASE_WEAPON = { titan: 2, striker: 0, support: 0 };
   function renderQuests() {
     const wrap = $("questCards");
     wrap.innerHTML = "";
@@ -1423,7 +1618,7 @@
       sm.classList.add("go");
       blip([110, 150, 200, 260, 330, 440, 550, 660], 0.08, "sawtooth");
       await wait(800);
-      fx("spell", PAINTS[cfg.paint].beam);
+      fx("spell", paintOf().beam || paintOf().eye);
       damageFoe(rand(95, 125) * (f.down ? 1.3 : 1));
       await wait(900);
       sm.classList.remove("go");
@@ -1579,9 +1774,9 @@
     ],
   };
   const UNIT_BASE = {
-    titan: { hp: 34, atk: 13, def: 6, mov: 3, rng: [1, 1], weapon: 0 },
-    striker: { hp: 26, atk: 12, def: 4, mov: 4, rng: [1, 2], weapon: 2 },
-    support: { hp: 21, atk: 7, def: 3, mov: 5, rng: [1, 1], heal: 10, weapon: 1 },
+    titan: { hp: 34, atk: 13, def: 6, mov: 3, rng: [1, 1], weapon: 2 },
+    striker: { hp: 26, atk: 12, def: 4, mov: 4, rng: [1, 2], weapon: 0 },
+    support: { hp: 21, atk: 7, def: 3, mov: 5, rng: [1, 1], heal: 10, weapon: 0 },
   };
   const BEATS = { titan: "striker", striker: "support", support: "titan" };
   const SQUAD_NAMES = { titan: "BRUNO", striker: "ZEKE", support: "MIRA" };
@@ -1608,7 +1803,7 @@
       atk: b.atk + (side === "E" ? Math.round((mod - 1) * 10) : 0), def: b.def, mov: b.mov, rng: b.rng, heal: b.heal || 0,
       acted: false,
       name: side === "P" ? (mine ? "KENNY" : SQUAD_NAMES[cls]) : "HOSTILE-" + "ABCDEFG"[i],
-      img: unitImage(cls, mine ? cfg.weapon : b.weapon, side === "P" ? PAINTS[cfg.paint] : HOSTILE),
+      img: unitImage(cls, mine ? cfg.weapon : b.weapon, side === "P" ? (mine ? paintOf() : CLASSES[cls].paints[0]) : HOSTILE),
     };
   }
 
@@ -2129,26 +2324,6 @@
     { org: "Le Wagon", what: "Full Stack Web Development", when: "2023", where: "Bali, Indonesia", icon: "sword" },
     { org: "Universitas Internasional Batam", what: "Computer Science", when: "2020", where: "Batam, Indonesia", icon: "crystal" },
   ];
-  const FILES = [
-    { name: "MECHA", sub: "Gundam · Transformers · every giant robot", sprite: "minimech", lv: "LV 99", time: "999:59",
-      loc: "Hangar Bay 03", tags: ["Transforming", "Launch sequences", "Beam sabers"],
-      line: "Giant robots, transforming or not. Bonus points for a dramatic launch sequence." },
-    { name: "FINAL FANTASY", sub: "Crystals, summons, airships", sprite: "crystal", lv: "LV 99", time: "812:40",
-      loc: "The Crystal Tower", tags: ["Summons", "ATB", "Airships"],
-      line: "Summons, crystals, and a save file with way too many hours on it." },
-    { name: "MONSTER HUNTER", sub: "Hunt, carve, craft, repeat", sprite: "meat", lv: "HR 999", time: "1204:33",
-      loc: "Base Camp", tags: ["Great swords", "Carving", "Armor sets"],
-      line: "Hunt it, carve it, craft better armor, then go hunt something bigger." },
-    { name: "FIRE EMBLEM", sub: "Tactics and the weapon triangle", sprite: "sword", lv: "LV 20", time: "356:12",
-      loc: "Chapter 24 · Classic mode", tags: ["Tactics", "Weapon triangle", "Permadeath"],
-      line: "Sword beats axe, axe beats lance, lance beats sword. Permadeath beats me." },
-    { name: "PERSONA", sub: "Calendars, confidants, all-out attacks", sprite: "mask", lv: "LV 99", time: "DAY 187",
-      loc: "After school · Rainy day", tags: ["Calendar", "Social links", "All-out attacks"],
-      line: "Dungeons at night, school during the day. Every day on the calendar counts." },
-    { name: "JRPG & RPG", sub: "Parties, grinding, epic soundtracks", sprite: "potion", lv: "LV 99", time: "∞",
-      loc: "The last save point", tags: ["Turn-based", "Action", "Grinding"],
-      line: "Turn-based, action, tactics, all of it. Grinding XP at 3 AM." },
-  ];
   const skillCount = SKILL_GROUPS.reduce((a, g) => a + g.items.length, 0);
 
   const statusPanel = $("statusPanel");
@@ -2175,7 +2350,7 @@
         <a class="tbtn" href="mailto:kendevxz@gmail.com">✉ kendevxz@gmail.com</a>
         <a class="tbtn ghost" href="https://github.com/kendevxz" rel="noopener">GitHub · kendevxz</a>
       </div>`;
-    statusPanel.querySelector(".st-portrait").appendChild(spriteCanvas("pilot", 7));
+    statusPanel.querySelector(".st-portrait").appendChild(buildPortrait(2));
   }
 
   function tabSkills() {
@@ -2200,44 +2375,7 @@
     statusPanel.querySelectorAll(".tr-icon").forEach((el) => el.appendChild(spriteCanvas(el.dataset.icon, 5)));
   }
 
-  let fileTimer;
-  function tabFiles() {
-    statusPanel.innerHTML = `<div class="files-grid"><div class="file-list" role="listbox" aria-label="Save files"></div><div class="file-detail" aria-live="polite"></div></div>`;
-    const list = statusPanel.querySelector(".file-list");
-    FILES.forEach((f, i) => {
-      const b = document.createElement("button");
-      b.className = "slot";
-      b.setAttribute("role", "option");
-      b.innerHTML =
-        `<span class="slot-icon"></span><span class="slot-title">${f.name}<small>${f.sub}</small></span>` +
-        `<span class="slot-meta">${f.lv}<span>${f.time}</span></span>`;
-      b.querySelector(".slot-icon").appendChild(spriteCanvas(f.sprite, 3));
-      b.addEventListener("click", () => showFile(i));
-      list.appendChild(b);
-    });
-    showFile(0, true);
-  }
-  function showFile(i, instant) {
-    const f = FILES[i];
-    const detail = statusPanel.querySelector(".file-detail");
-    if (!detail) return;
-    statusPanel.querySelectorAll(".slot").forEach((b, j) => b.setAttribute("aria-selected", String(j === i)));
-    const render = () => {
-      if (!detail.isConnected) return;
-      detail.innerHTML =
-        `<div class="art"></div><h3>${f.name}</h3><div class="loc">LOCATION · ${f.loc}<br>PLAYTIME · ${f.time}</div>` +
-        `<p>${f.line}</p><div class="tags">${f.tags.map((t) => `<span>${t}</span>`).join("")}</div>`;
-      detail.querySelector(".art").appendChild(spriteCanvas(f.sprite, 8));
-    };
-    clearTimeout(fileTimer);
-    if (instant) return render();
-    detail.innerHTML = `<p class="loading">LOADING FILE ${i + 1}...</p>`;
-    blip([660, 880, 990], 0.05);
-    fileTimer = setTimeout(render, 380);
-    once("file-" + i, () => addExp(25));
-  }
-
-  const TABS = { status: tabStatus, skills: tabSkills, journey: tabJourney, training: tabTraining, files: tabFiles };
+  const TABS = { status: tabStatus, skills: tabSkills, journey: tabJourney, training: tabTraining };
   statusTabsEl.querySelectorAll(".menu-item").forEach((b) => {
     b.addEventListener("click", () => {
       statusTabsEl.querySelectorAll(".menu-item").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
@@ -2254,19 +2392,19 @@
   /* =========================================================
      CHAPTER IV — TOY CHEST PHYSICS
      ========================================================= */
-  const box = $("toybox");
+  const toyBox = $("toybox");
   const toys = [];
   let floatMode = false;
   let boxVisible = false;
-  let bw = box.clientWidth, bh = box.clientHeight;
-  new ResizeObserver(() => { bw = box.clientWidth; bh = box.clientHeight; }).observe(box);
+  let bw = toyBox.clientWidth, bh = toyBox.clientHeight;
+  new ResizeObserver(() => { bw = toyBox.clientWidth; bh = toyBox.clientHeight; }).observe(toyBox);
 
   function addToy(name = pick(TOYS), x, y) {
     const scale = Math.round(rand(4, 6));
     const el = spriteCanvas(name, scale);
     el.className = "toy";
     el.title = TOY_NAMES[name];
-    box.appendChild(el);
+    toyBox.appendChild(el);
     const t = {
       el, name, w: el.width, h: el.height,
       x: x ?? rand(20, Math.max(40, bw - el.width - 20)),
@@ -2279,14 +2417,14 @@
       e.preventDefault();
       el.setPointerCapture(e.pointerId);
       el.classList.add("dragging");
-      const r = box.getBoundingClientRect();
+      const r = toyBox.getBoundingClientRect();
       t.drag = { ox: e.clientX - r.left - t.x, oy: e.clientY - r.top - t.y, lx: e.clientX, ly: e.clientY, lt: performance.now() };
       t.vx = t.vy = 0;
       blip(440, 0.04);
     });
     el.addEventListener("pointermove", (e) => {
       if (!t.drag) return;
-      const r = box.getBoundingClientRect();
+      const r = toyBox.getBoundingClientRect();
       const now = performance.now();
       const dt = Math.max(1, now - t.drag.lt) / 16;
       t.vx = (e.clientX - t.drag.lx) / dt;
@@ -2353,7 +2491,7 @@
     if (boxVisible) stepToys();
     requestAnimationFrame(toyLoop);
   })();
-  new IntersectionObserver(([e]) => { boxVisible = e.isIntersecting; }, { threshold: 0.05 }).observe(box);
+  new IntersectionObserver(([e]) => { boxVisible = e.isIntersecting; }, { threshold: 0.05 }).observe(toyBox);
 
   $("btnOpen").addEventListener("click", () => {
     if (toys.length >= 40) { toast("The chest is full!"); return; }
@@ -2366,7 +2504,7 @@
   });
   $("btnShake").addEventListener("click", () => {
     toys.forEach((t) => { t.vx += rand(-14, 14); t.vy -= rand(8, 18); t.vr += rand(-20, 20); });
-    box.animate([{ transform: "translateX(0)" }, { transform: "translateX(-10px)" }, { transform: "translateX(10px)" }, { transform: "translateX(0)" }], { duration: 250, iterations: 2 });
+    toyBox.animate([{ transform: "translateX(0)" }, { transform: "translateX(-10px)" }, { transform: "translateX(10px)" }, { transform: "translateX(0)" }], { duration: 250, iterations: 2 });
     blip([150, 110, 150], 0.05, "sawtooth");
   });
   const gBtn = $("btnGravity");
@@ -2422,6 +2560,7 @@
   const KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
   let kIdx = 0;
   document.addEventListener("keydown", (e) => {
+    if (document.body.classList.contains("casual-mode") || !$("modeGate").hidden) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     kIdx = k === KONAMI[kIdx] ? kIdx + 1 : (k === KONAMI[0] ? 1 : 0);
     if (kIdx === KONAMI.length) {
@@ -2466,5 +2605,104 @@
     }
   }
 
-  once("hello", () => setTimeout(() => toast("A new adventure begins..."), 900));
+  /* =========================================================
+     VIEW MODES — hardcore (intended) or casual (professional)
+     ========================================================= */
+  const gate = $("modeGate");
+  const casualEl = $("casual");
+  let casualBuilt = false;
+  const CASUAL_TITLES = { "SALES & CUSTOMER SUCCESS": "Sales & Customer Success", "CRM & SALES TOOLS": "CRM & Sales Tools", TECHNICAL: "Technical" };
+
+  function buildCasual() {
+    if (casualBuilt) return;
+    casualBuilt = true;
+    const esc = (t) => t.replace(/&/g, "&amp;");
+    casualEl.innerHTML = `
+      <header class="c-top"><div class="c-wrap">
+        <a class="c-brand" href="#c-home">Kenny Devin Wijaya</a>
+        <nav aria-label="Sections"><a href="#c-skills">Skills</a><a href="#c-exp">Experience</a><a href="#c-edu">Education</a><a href="#c-contact">Contact</a></nav>
+        <button class="c-switch" id="toHardcore" type="button">Hardcore view</button>
+      </div></header>
+      <main>
+        <section class="c-hero c-wrap" id="c-home">
+          <div class="c-avatar"></div>
+          <div>
+            <p class="c-eyebrow">Product &amp; Sales Specialist · Batam, Indonesia · Remote</p>
+            <h1>Kenny Devin Wijaya</h1>
+            <p class="c-lead">I work in sales and customer success, backed by a full-stack web toolkit: discovery calls, product demos and pipeline management on one side, Ruby on Rails, Vue.js and PostgreSQL on the other.</p>
+            <div class="c-actions">
+              <a class="c-btn" href="mailto:kendevxz@gmail.com">Email me</a>
+              <a class="c-btn ghost" href="https://github.com/kendevxz" rel="noopener">GitHub</a>
+            </div>
+          </div>
+        </section>
+        <div class="c-wrap c-facts">
+          <div><b>2016</b><span>Working in sales &amp; tech since</span></div>
+          <div><b>${JOURNEY.length}</b><span>Roles held</span></div>
+          <div><b>${skillCount}</b><span>Skills</span></div>
+          <div><b>Respyre</b><span>Current role</span></div>
+        </div>
+        <section class="c-section c-wrap" id="c-skills">
+          <h2>Skills</h2>
+          <div class="c-skills">${SKILL_GROUPS.map((g) => `
+            <div class="c-card"><h3>${esc(CASUAL_TITLES[g.title])}</h3>
+              <ul class="c-chips">${g.items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul></div>`).join("")}
+          </div>
+        </section>
+        <section class="c-section c-wrap" id="c-exp">
+          <h2>Experience</h2>
+          <ol class="c-timeline">${JOURNEY.map((j) => `
+            <li><div class="c-when">${j.when.replace("NOW", "Present")}</div>
+              <div><h3>${esc(j.role)}</h3><p class="c-org">${esc(j.org)} · ${j.where}</p><p>${esc(j.text)}</p></div></li>`).join("")}
+          </ol>
+        </section>
+        <section class="c-section c-wrap" id="c-edu">
+          <h2>Education</h2>
+          <div class="c-edu">${TRAINING.map((t) => `
+            <div class="c-card"><span class="c-when">${t.when}</span><h3>${esc(t.org)}</h3><p>${esc(t.what)} · ${t.where}</p></div>`).join("")}
+          </div>
+        </section>
+      </main>
+      <footer class="c-footer" id="c-contact"><div class="c-wrap">
+        <h2>Let's talk</h2>
+        <p>Open to conversations about sales, customer success and product roles.</p>
+        <div class="c-actions"><a class="c-btn" href="mailto:kendevxz@gmail.com">kendevxz@gmail.com</a><a class="c-btn ghost" href="https://github.com/kendevxz" rel="noopener">github.com/kendevxz</a></div>
+        <p class="c-small">© 2026 Kenny Devin Wijaya · <button type="button" class="c-link" id="toHardcore2">Switch to the hardcore view</button></p>
+      </div></footer>`;
+    const portrait = buildPortrait(3);
+    casualEl.querySelector(".c-avatar").appendChild(portrait);
+    $("toHardcore").addEventListener("click", () => applyMode("hardcore", true));
+    $("toHardcore2").addEventListener("click", () => applyMode("hardcore", true));
+  }
+
+  function applyMode(m, announce) {
+    store.set("kd-mode", m);
+    const casual = m === "casual";
+    if (casual) buildCasual();
+    document.body.classList.toggle("casual-mode", casual);
+    casualEl.hidden = !casual;
+    document.documentElement.style.scrollBehavior = "auto";
+    window.scrollTo(0, 0);
+    document.documentElement.style.scrollBehavior = "";
+    if (!casual) { titleMenu.refresh(); statusMenu.refresh(); sizeStars(); }
+    if (announce && !casual) setTimeout(() => toast("A new adventure begins..."), 400);
+  }
+
+  $("modeBtn").addEventListener("click", () => applyMode("casual"));
+  gate.querySelectorAll("[data-mode]").forEach((b) =>
+    b.addEventListener("click", () => {
+      gate.hidden = true;
+      document.body.classList.remove("locked");
+      applyMode(b.dataset.mode, true);
+    })
+  );
+
+  const savedMode = store.get("kd-mode", null);
+  if (savedMode === "hardcore" || savedMode === "casual") applyMode(savedMode);
+  else {
+    gate.hidden = false;
+    document.body.classList.add("locked");
+    gate.querySelector("[data-mode]").focus();
+  }
+
 })();

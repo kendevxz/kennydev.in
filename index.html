@@ -8,7 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%230a0f2c'/><path d='M8 1l4 6-4 8-4-8z' fill='%237df9ff'/><path d='M8 1l4 6H4z' fill='%23fff' opacity='.7'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=Cinzel:wght@700;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=Cinzel:wght@700;900&family=Inter:wght@400;500;600;700&family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -30,6 +30,7 @@
     <div class="hud-right">
       <span class="gil"><b id="gil">0</b> G</span>
       <button id="sound" class="hud-btn" aria-pressed="false" title="Toggle sound">♪ OFF</button>
+      <button id="modeBtn" class="hud-btn mode-btn" title="Switch to the casual, professional view">CASUAL</button>
     </div>
   </header>
 
@@ -108,7 +109,7 @@
           <div class="opt-row" data-opt="cls"></div>
         </div>
         <div class="opt">
-          <span class="opt-label">PAINT</span>
+          <span class="opt-label">PAINT · <b id="paintName"></b></span>
           <div class="opt-row swatches" data-opt="paint"></div>
         </div>
         <div class="opt">
@@ -152,7 +153,7 @@
     <header class="chapter-head">
       <span class="chapter-num">CHAPTER III</span>
       <h2>Status</h2>
-      <p>Work, skills, and the worlds I keep coming back to.</p>
+      <p>Work, skills, and where I've been.</p>
     </header>
     <div class="status-grid">
       <div class="window menu status-tabs" id="statusTabs" role="tablist" aria-label="Status menu">
@@ -160,7 +161,6 @@
         <button class="menu-item" role="tab" data-tab="skills" aria-selected="false">SKILLS</button>
         <button class="menu-item" role="tab" data-tab="journey" aria-selected="false">JOURNEY</button>
         <button class="menu-item" role="tab" data-tab="training" aria-selected="false">TRAINING</button>
-        <button class="menu-item" role="tab" data-tab="files" aria-selected="false">FILES</button>
       </div>
       <div class="window status-panel" id="statusPanel" role="tabpanel" aria-live="polite"></div>
     </div>
@@ -244,6 +244,31 @@
       <div class="result" id="tResult" hidden></div>
     </div>
   </div>
+
+  <!-- ============ FIRST VISIT: VIEW MODE ============ -->
+  <div class="mode-gate" id="modeGate" hidden>
+    <div class="gate-box" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+      <p class="gate-kicker">BEFORE YOU PRESS START</p>
+      <h2 id="gateTitle">How would you like to view this site?</h2>
+      <p class="gate-text">This site leans heavily on references to the games, anime and toys its owner loves: mechs, JRPGs, tactics games and a lot of pixel art. If that's not what you're here for, there's a plain version too.</p>
+      <div class="gate-options">
+        <button class="gate-opt opt-hardcore" data-mode="hardcore" type="button">
+          <span class="gate-tag">INTENDED</span>
+          <b>HARDCORE</b>
+          <span>The full experience, as it's meant to be seen: pixel art, mechs, battles, sound effects and a few secrets.</span>
+        </button>
+        <button class="gate-opt opt-casual" data-mode="casual" type="button">
+          <span class="gate-tag">PROFESSIONAL</span>
+          <b>Casual</b>
+          <span>A clean view for business and professional visitors: profile, skills, experience and contact details.</span>
+        </button>
+      </div>
+      <p class="gate-note">You can switch any time from the top bar.</p>
+    </div>
+  </div>
+
+  <!-- ============ CASUAL VIEW (built by script) ============ -->
+  <div class="casual" id="casual" hidden></div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="rain" class="rain" aria-hidden="true"></div>
