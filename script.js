@@ -744,7 +744,7 @@
       { lean: 5, head: -4, legL: [18, -18, -6], legR: [-22, 22, 7], armL: [12, -40], armR: [-18, -62], w: 90 },
     ],
     titan: [
-      { lean: 3, head: -4, legL: [10, -10, -6], legR: [-10, 10, 6], armL: [10, -30], armR: [-8, -56], w: 0 },
+      { lean: 3, head: -4, legL: [10, -10, -6], legR: [-10, 10, 6], armL: [10, -30], armR: [0, -86], w: -2, ox: -14 },
       { lean: -2, head: 0, legL: [10, -10, -6], legR: [-10, 10, 6], armL: [24, -70], armR: [-24, 70], w: 0 },
       { lean: -5, head: 6, legL: [12, -12, -6], legR: [-10, 10, 7], armL: [12, -34], armR: [-18, -24], w: 28 },
     ],
@@ -782,7 +782,7 @@
       q = limbXF(rotAbout(p, hand, side === "R" ? POSE.w : 0), side, true, true);
     } else if (TAG === "head") q = torsoXF(rotAbout(p, RIG.neck, POSE.head));
     else q = torsoXF(p);
-    return [q[0] + POSE_OX, q[1] + POSE_OY];
+    return [q[0] + POSE_OX + (POSE.ox || 0), q[1] + POSE_OY];
   }
   withSide = (pts, fn) => {
     if (SIDE || (TAG !== "leg" && TAG !== "arm" && TAG !== "shoulder")) return fn();
@@ -911,10 +911,13 @@
     lineP(G, 6, 62, 15, 62, "m2", 1, true);
     PT("weapon", "R");
     if (w === 0) {
-      prism(G, [[51, 65], [66, 65], [66, 71], [51, 71]], 2, "m2");
-      for (const x of [52, 56, 60]) prism(G, [[x, 71], [x + 3, 71], [x + 3, 82], [x, 82]], 1, "g");
-      prism(G, [[51, 75], [65, 75], [65, 77], [51, 77]], 1, "m3");
-      celDot(G, 63, 67, "e", 5);
+      // ammo drum, motor housing, barrel cluster, muzzle ring
+      prism(G, [[62, 58], [70, 58], [70, 68], [62, 68]], 1, "m3");
+      prism(G, [[50, 63], [67, 63], [67, 73], [50, 73]], 2, "m2");
+      for (const x of [51, 55, 59, 63]) prism(G, [[x, 73], [x + 3, 73], [x + 3, 88], [x, 88]], 0, "g");
+      prism(G, [[50, 77], [67, 77], [67, 79], [50, 79]], 0, "m2", { outline: false });
+      prism(G, [[50, 85], [67, 85], [67, 88], [50, 88]], 1, "d");
+      [[57, 66, 5], [58, 66, 5], [57, 67, 4], [58, 67, 4]].forEach(([x, y, t]) => celDot(G, x, y, "e", t));
     } else if (w === 2) {
       prism(G, [[59, 22], [62, 22], [62, 60], [59, 60]], 1, "f");
       prism(G, [[50, 7], [69, 7], [69, 21], [50, 21]], 3, "m2");
