@@ -283,6 +283,31 @@
       "...TTTTTT...",
       "....TTTT....",
     ],
+    tree: [
+      "...NN...",
+      "..NNNN..",
+      ".NNMNNN.",
+      "NNNNNMNN",
+      ".NMNNNN.",
+      "..NNNN..",
+      "...BB...",
+      "...BB...",
+    ],
+    rock: [
+      "..GGG...",
+      ".GGGGD..",
+      "GGGGGDD.",
+      "GGDGGGD.",
+      ".DDDDD..",
+    ],
+    ruin: [
+      "G.....G.",
+      "GG...GG.",
+      "GDG..GD.",
+      "GGGGGGG.",
+      "GDGGDGG.",
+      "GGGGGGG.",
+    ],
   };
   const TOYS = ["minimech", "slime", "potion", "crystal", "sword", "shield", "chest", "d20", "meat", "mask", "heart", "star", "gem", "shroom"];
   const TOY_NAMES = {
@@ -523,329 +548,381 @@
   window.addEventListener("resize", () => titleMenu.refresh());
 
   /* =========================================================
-     MECH — SVG built from parts
+     MECHS — paint schemes, classes, weapons
      ========================================================= */
   const PAINTS = [
-    { name: "TRICOLOR", m1: "#f1f3f9", m2: "#2f5fd6", m3: "#e63946", m4: "#ffd23f", eye: "#7df9ff", beam: "#ff6bd6" },
-    { name: "CRIMSON COMET", m1: "#e5383b", m2: "#8d0f1f", m3: "#2b2d42", m4: "#ffd23f", eye: "#ff8fd8", beam: "#ffd23f" },
-    { name: "SHADOW", m1: "#3a3d56", m2: "#16172b", m3: "#ffb703", m4: "#ffd23f", eye: "#ff3b3b", beam: "#ff3b3b" },
-    { name: "FIELD GREEN", m1: "#6a8d3a", m2: "#3a5a26", m3: "#c7d59f", m4: "#ecf39e", eye: "#ff5c8a", beam: "#9dff6b" },
-    { name: "PRISM", m1: "#ffffff", m2: "#9b5de5", m3: "#3ee6ff", m4: "#f15bb5", eye: "#fee440", beam: "#3ee6ff" },
+    { name: "TRICOLOR", m1: "#f1f3f9", m2: "#2f5fd6", m3: "#e63946", eye: "#7df9ff", beam: "#ff6bd6" },
+    { name: "SUNBURST", m1: "#f0a13a", m2: "#c0612b", m3: "#3a86ff", eye: "#7df9ff", beam: "#ffd23f" },
+    { name: "GLACIER", m1: "#a9c1ee", m2: "#5a78b8", m3: "#e63946", eye: "#ffd23f", beam: "#ff6bd6" },
+    { name: "AURUM", m1: "#e0c341", m2: "#9c7d22", m3: "#e63946", eye: "#7dff9b", beam: "#9dff6b" },
+    { name: "SHADOW", m1: "#4f536f", m2: "#2a2c45", m3: "#ffb703", eye: "#ff3b3b", beam: "#ff3b3b" },
   ];
-  const HEADS = [
-    { name: "VANGUARD", code: "RX", s: [2, 3, 1, 4] },
-    { name: "SENTINEL", code: "MS", s: [3, 2, 2, 2] },
-    { name: "TITAN", code: "GX", s: [4, 1, 2, 3] },
-  ];
-  const WEAPONS = [
-    { name: "BEAM SABER", s: [1, 2, 3, 3] },
-    { name: "RIFLE", s: [1, 1, 5, 1] },
-    { name: "CANNON", s: [2, 0, 6, 2] },
-  ];
-  const PACKS = [
-    { name: "WINGS", s: [1, 4, 1, 3] },
-    { name: "BOOSTERS", s: [3, 3, 2, 1] },
-  ];
-  const STAT_NAMES = ["ARMOR", "MOBILITY", "FIREPOWER", "STYLE"];
-
-  const saved = store.get("kd2-mech", {}) || {};
-  const cfg = {
-    head: HEADS[saved.head] ? saved.head : 0,
-    paint: PAINTS[saved.paint] ? saved.paint : 0,
-    weapon: WEAPONS[saved.weapon] ? saved.weapon : 0,
-    pack: PACKS[saved.pack] ? saved.pack : 0,
+  const HOSTILE = { name: "HOSTILE", m1: "#8d929e", m2: "#6b2233", m3: "#ff3b3b", eye: "#ff3b3b", beam: "#ff3b3b" };
+  const CLASS_INFO = {
+    titan: { code: "HV", stats: [8, 3, 6, 2], vehicle: "TANK" },
+    striker: { code: "AS", stats: [5, 6, 7, 3], vehicle: "FIGHTER" },
+    support: { code: "RP", stats: [3, 8, 2, 9], vehicle: "HOVER" },
   };
+  const WEAPONS = [
+    { name: "CANNON", s: [1, -1, 3, 0] },
+    { name: "BEAM SABER", s: [0, 1, 2, 0] },
+    { name: "GATLING", s: [0, 0, 2, 1] },
+  ];
+  const STAT_NAMES = ["ARMOR", "MOBILITY", "FIREPOWER", "SUPPORT"];
 
-  function unitName(c = cfg) {
-    const h = HEADS[c.head];
-    const num = String(c.head * 6 + c.weapon * 2 + c.pack + 1).padStart(2, "0");
-    return `${h.code}-${num} ${h.name}`;
-  }
-
-  /* ---------- pixel mech: half-grids mirrored, plus parts drawn in code ---------- */
-  const PM_W = 48, PM_H = 60;
-  const PJ_W = 54, PJ_H = 28;
+  /* ---------- shaded pixel renderer: lit primitives → tone ramp → outline ---------- */
+  const MW = 72, MH = 64;
+  const LIGHT = (() => { const v = [-0.55, -0.72, 0.6]; const l = Math.hypot(...v); return v.map((c) => c / l); })();
+  const BAYER = [[0, 2], [3, 1]];
 
   function shade(hex, amt) {
     const n = parseInt(hex.slice(1), 16);
-    let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
-    const f = (c) => Math.round(amt < 0 ? c * (1 + amt) : c + (255 - c) * amt);
-    return "#" + [f(r), f(g), f(b)].map((c) => c.toString(16).padStart(2, "0")).join("");
+    const ch = [n >> 16, (n >> 8) & 255, n & 255];
+    const f = (c) => Math.max(0, Math.min(255, Math.round(amt < 0 ? c * (1 + amt) : c + (255 - c) * amt)));
+    return "#" + ch.map((c) => f(c).toString(16).padStart(2, "0")).join("");
   }
-  function mechColors(P) {
+  const ramp = (hex) => [shade(hex, -0.72), shade(hex, -0.5), shade(hex, -0.26), hex, shade(hex, 0.32), shade(hex, 0.75)];
+
+  function materials(P) {
     return {
-      k: "#0b0d1c",
-      "1": P.m1, "!": shade(P.m1, -0.3), w: shade(P.m1, 0.65),
-      "2": P.m2, "@": shade(P.m2, -0.32),
-      "3": P.m3, "#": shade(P.m3, -0.32),
-      "4": P.m4, "$": shade(P.m4, -0.3),
-      f: "#353a55", F: "#5b6388",
-      e: P.eye, E: shade(P.eye, 0.75),
-      b: P.beam, B: shade(P.beam, 0.8),
-      y: "#fff3a0", o: "#ffb020", r: "#ff5a1f",
+      m1: ramp(P.m1), m2: ramp(P.m2), m3: ramp(P.m3),
+      frame: ramp("#6d7390"), dark: ramp("#3b3f57"), gun: ramp("#8b92aa"),
+      glass: ramp(P.glass || "#4cc9f0"),
+      eye: Array(6).fill(P.eye).map((c, i) => (i === 0 ? shade(P.eye, -0.6) : i >= 4 ? shade(P.eye, 0.7) : c)),
+      beam: [shade(P.beam, -0.4), P.beam, P.beam, shade(P.beam, 0.4), shade(P.beam, 0.75), "#ffffff"],
+      fire: ["#b3261e", "#ff5a1f", "#ff8c1a", "#ffb020", "#ffe066", "#fff6c2"],
     };
   }
 
-  const grid = (w, h) => Array.from({ length: h }, () => Array(w).fill("."));
-  function half(y0, rows) {
-    const gd = grid(PM_W, PM_H);
-    rows.forEach((row, i) => {
-      const r = row.padEnd(24, ".").slice(0, 24);
-      for (let x = 0; x < 24; x++) {
-        const ch = r[x];
-        if (ch === ".") continue;
-        if (gd[y0 + i]) { gd[y0 + i][x] = ch; gd[y0 + i][PM_W - 1 - x] = ch; }
+  /* ---------- a layer is a grid of [material, tone] ---------- */
+  function layer() { return { px: Array.from({ length: MH }, () => Array(MW).fill(null)), flat: false }; }
+  function put(L, x, y, mat, n) {
+    if (x < 0 || y < 0 || x >= MW || y >= MH) return;
+    if (mat === "eye" || mat === "beam" || mat === "fire") { L.px[y][x] = [mat, n === undefined ? 3 : n]; return; }
+    let I = Math.max(0, n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]);
+    I = I * 0.9 + 0.1 + (BAYER[y & 1][x & 1] - 1.5) * 0.035;
+    const spec = n[2] > 0.55 && I > 0.97;
+    const t = spec ? 5 : I < 0.26 ? 1 : I < 0.47 ? 2 : I < 0.7 ? 3 : 4;
+    L.px[y][x] = [mat, t];
+  }
+  function ellipse(L, cx, cy, rx, ry, mat) {
+    for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+      const nx = (x + 0.5 - cx) / rx, ny = (y + 0.5 - cy) / ry, d = nx * nx + ny * ny;
+      if (d <= 1) put(L, x, y, mat, [nx, ny, Math.sqrt(1 - d)]);
+    }
+  }
+  function capsule(L, x1, y1, x2, y2, r, mat) {
+    const dx = x2 - x1, dy = y2 - y1, len2 = dx * dx + dy * dy || 1;
+    for (let y = Math.floor(Math.min(y1, y2) - r); y <= Math.ceil(Math.max(y1, y2) + r); y++)
+      for (let x = Math.floor(Math.min(x1, x2) - r); x <= Math.ceil(Math.max(x1, x2) + r); x++) {
+        const px = x + 0.5, py = y + 0.5;
+        const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2));
+        const qx = (px - (x1 + t * dx)) / r, qy = (py - (y1 + t * dy)) / r, d = qx * qx + qy * qy;
+        if (d <= 1) put(L, x, y, mat, [qx, qy, Math.sqrt(1 - d)]);
       }
-    });
-    return gd;
   }
-  const tail = (rows) => rows.map((r) => "............" + r);
-  function rect(gd, x, y, w, h, ch) {
-    for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (gd[j] && i >= 0 && i < gd[0].length) gd[j][i] = ch;
+  function poly(L, pts, mat, bev = 2.2) {
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    for (let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++)
+      for (let x = Math.floor(Math.min(...xs)); x <= Math.ceil(Math.max(...xs)); x++) {
+        const px = x + 0.5, py = y + 0.5;
+        let inside = false, best = Infinity, bn = [0, 0];
+        for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+          const [xi, yi] = pts[i], [xj, yj] = pts[j];
+          if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+          const ex = xi - xj, ey = yi - yj, el2 = ex * ex + ey * ey || 1;
+          const t = Math.max(0, Math.min(1, ((px - xj) * ex + (py - yj) * ey) / el2));
+          const d = Math.hypot(px - (xj + t * ex), py - (yj + t * ey));
+          if (d < best) { best = d; bn = [px - (xj + t * ex), py - (yj + t * ey)]; }
+        }
+        if (!inside) continue;
+        let n = [0.12, -0.18, 0.97];
+        if (best < bev) {
+          const k = (1 - best / bev) * 0.85, l = Math.hypot(bn[0], bn[1]) || 1;
+          const nx = (-bn[0] / l) * k, ny = (-bn[1] / l) * k;
+          n = [nx, ny, Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny))];
+        }
+        put(L, x, y, mat, n);
+      }
   }
-  function outline(gd, skip = "bByor") {
-    const h = gd.length, w = gd[0].length;
+  function line(L, x1, y1, x2, y2, mat, tone) {
+    const n = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)) || 1;
+    for (let i = 0; i <= n; i++) {
+      const x = Math.round(x1 + ((x2 - x1) * i) / n), y = Math.round(y1 + ((y2 - y1) * i) / n);
+      if (x >= 0 && y >= 0 && x < MW && y < MH) L.px[y][x] = [mat, tone];
+    }
+  }
+  function outlineLayer(L) {
     const add = [];
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      if (gd[y][x] !== ".") continue;
+    for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
+      if (L.px[y][x]) continue;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const c = gd[y + dy] && gd[y + dy][x + dx];
-        if (c && c !== "." && c !== "k" && !skip.includes(c)) { add.push([x, y]); break; }
+        const c = L.px[y + dy] && L.px[y + dy][x + dx];
+        if (c && c[1] !== -1 && c[0] !== "fire" && c[0] !== "beam") { add.push([x, y, c[0]]); break; }
       }
     }
-    add.forEach(([x, y]) => (gd[y][x] = "k"));
-    return gd;
+    add.forEach(([x, y, m]) => (L.px[y][x] = [m, 0]));
   }
-  function poly(gd, pts, ch) {
-    const h = gd.length, w = gd[0].length;
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const px = x + 0.5, py = y + 0.5;
-      let inside = false;
-      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-        const [xi, yi] = pts[i], [xj, yj] = pts[j];
-        if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+
+  /* ---------- weapons (anchor = hand, s = size) ---------- */
+  function weapon(kind, ax, ay, s) {
+    const L = layer();
+    if (kind === 0) { // heavy arm cannon
+      capsule(L, ax - 2, ay, ax + 26 * s, ay, 4.2 * s, "gun");
+      poly(L, [[ax + 4 * s, ay - 5.5 * s], [ax + 12 * s, ay - 5.5 * s], [ax + 12 * s, ay + 5.5 * s], [ax + 4 * s, ay + 5.5 * s]], "m3", 1.6);
+      poly(L, [[ax + 20 * s, ay - 5 * s], [ax + 23 * s, ay - 5 * s], [ax + 23 * s, ay + 5 * s], [ax + 20 * s, ay + 5 * s]], "m2", 1.2);
+      ellipse(L, ax + 26.5 * s, ay, 1.6 * s, 3 * s, "dark");
+      outlineLayer(L);
+    } else if (kind === 1) { // beam saber
+      capsule(L, ax - 1, ay + 1, ax + 5 * s, ay - 2 * s, 2.2 * s, "frame");
+      const len = 26 * s;
+      for (let i = 0; i < len; i++) {
+        const x = Math.round(ax + 5 * s + i * 0.8), y = Math.round(ay - 2 * s - i * 0.62);
+        for (let w = -2; w <= 2; w++) if (y + w >= 0 && y + w < MH && x < MW) L.px[y + w][x] = ["beam", Math.abs(w) === 2 ? 1 : Math.abs(w) === 1 ? 3 : 5];
       }
-      if (inside) gd[y][x] = ch;
+      outlineLayer(L);
+    } else { // gatling
+      for (const o of [-2.6, 0, 2.6]) capsule(L, ax, ay + o * s, ax + 24 * s, ay + o * s, 1.5 * s, "gun");
+      ellipse(L, ax + 2 * s, ay, 5 * s, 5.5 * s, "m2");
+      poly(L, [[ax + 18 * s, ay - 4.5 * s], [ax + 20 * s, ay - 4.5 * s], [ax + 20 * s, ay + 4.5 * s], [ax + 18 * s, ay + 4.5 * s]], "m3", 1);
+      outlineLayer(L);
     }
-  }
-
-  /* ---------- part art ---------- */
-  const WINGS = [
-    "k", "kk", "k2k", "k22k", "k222k", "k4222k", "k42222k", "k422222k", "k4222222k",
-    "k42222222k", "k4@222222@k", "k4@@22222@@k", "k4@@@2222@@@k", ".k4@@@222@@@@k", "..k4@@@@@@@@kk", "...k4@@@@kkk", "....kkkk",
-  ];
-  const BOOSTERS = [
-    "..........kkkk", ".........k2222k", ".........k2w22k", ".........k2w22k", ".........k2222k",
-    ".........k4444k", ".........k22@@k", ".........k2@@@k", ".........k2@@@k", ".........kffffk", ".........kkkkkk",
-  ];
-  const LEGS = [
-    "..............kfFFfk",
-    "..............kfFFfk",
-    "..............kfFFfk",
-    ".............kk2222kk",
-    ".............k2ww22@k",
-    ".............k22222@k",
-    ".............k2222@@k",
-    ".............kk1111kk",
-    ".............k1w111!k",
-    "............k11w111!!k",
-    "............k11w111!!k",
-    "............k3333333#k",
-    "............k11w111!!k",
-    "............k111111!!k",
-    "............k11111!!!k",
-    "............k1111!!!!k",
-    "............kkkkkkkkkk",
-    "...........k22222222@k",
-    "..........k222222222@@k",
-    "..........k@@@@@@@@@@@k",
-    "..........kkkkkkkkkkkkk",
-  ];
-  const WAIST = [
-    ".................kkkkkkk",
-    "................k1w11133",
-    "................k11111#3",
-    "................k!!!!k#3",
-    "................kkkkkk#3",
-    "......................k#",
-    "......................kk",
-  ];
-  const TORSO = [
-    "...............kkkkkkkkk",
-    "..............k111111111",
-    ".............k1w11111kkk",
-    ".............k2w222222ke",
-    ".............k2444442kEe",
-    ".............k2$$$$$2kee",
-    ".............k2444442kkk",
-    ".............k2$$$$$2222",
-    ".............k@222222222",
-    "..............k@22222222",
-    "..............k@@2222222",
-    "...............k11111111",
-    "...............k!!111111",
-    "...............kkkkkkkkk",
-  ];
-  const ARM = [
-    "......kkkkkkkk",
-    ".....k1111111k",
-    "....k11w111111k",
-    "....k1w1111111k",
-    "....k33333333#k",
-    "....k11111111!k",
-    "....k!!!!!!!!!k",
-    ".....kkkkkkkkk",
-    ".......kfFfk",
-    ".......kfFfk",
-    ".......kfFfk",
-    "......kk222kk",
-    ".....k1111111k",
-    ".....k1w11111k",
-    ".....k1w1111!k",
-    ".....k2222222k",
-    ".....k1111111k",
-    ".....k1111!!!k",
-    ".....kkkkkkkkk",
-    "......kfffffk",
-    "......kfFfFfk",
-    "......kfffffk",
-    ".......kkkkk",
-  ];
-  const HEADS_PX = [
-    // VANGUARD — V-fin, twin eyes
-    tail([
-      ".$4", "..$4", "...$4......k", "....$4....k3", ".....$4..k33", "......$4kk33",
-      "......kk1111", ".....k11w111", ".....k1kkkkk", ".....k1keeEk", ".....k1kkkkk",
-      ".....k!1ff1f", "......k!1k33", ".......kkkkk",
-    ]),
-    // SENTINEL — dome, mono-eye
-    tail([
-      "", "", "", "..........k3", ".........k33", ".......kkk33",
-      "......k11111", ".....k11w111", ".....k1kkkkk", ".....k1kffEe", ".....k1kkkkk",
-      ".....k!1111f", "......k!!1ff", ".......kkkkk",
-    ]),
-    // TITAN — great horn, heavy jaw
-    tail([
-      "...........4", "..........$4", "..4.......$4", "..$4.....k$4", "...$4....k$4", "....$4kkk$44",
-      ".....k111111", ".....k11w111", ".....k1kkkkk", ".....k1keeEk", ".....k1kkkkk",
-      ".....kffffff", "......kfFFff", ".......kkkkk",
-    ]),
-  ];
-
-  function weaponLayer(kind) {
-    const gd = grid(PM_W, PM_H);
-    if (kind === 0) {
-      // beam saber: hilt in the right hand, blade angled up and out
-      for (let i = 0; i < 26; i++) {
-        const y = 31 - i, x = 40 + Math.floor(i / 4);
-        gd[y][x] = "B";
-        if (gd[y][x - 1] !== undefined) gd[y][x - 1] = "b";
-        if (x + 1 < PM_W) gd[y][x + 1] = "b";
-      }
-      rect(gd, 38, 32, 3, 7, "f");
-      rect(gd, 39, 33, 1, 5, "F");
-      rect(gd, 37, 32, 5, 1, "4");
-      outline(gd);
-    } else if (kind === 1) {
-      // rifle held forward
-      rect(gd, 31, 32, 17, 3, "f");
-      rect(gd, 31, 32, 17, 1, "F");
-      rect(gd, 35, 29, 6, 2, "2");
-      rect(gd, 36, 29, 2, 1, "e");
-      rect(gd, 36, 35, 2, 3, "f");
-      rect(gd, 46, 32, 2, 3, "4");
-      outline(gd);
-    }
-    return gd;
-  }
-  function cannonLayer() {
-    const gd = grid(PM_W, PM_H);
-    rect(gd, 36, 1, 5, 15, "2");
-    rect(gd, 40, 1, 1, 15, "@");
-    rect(gd, 37, 2, 1, 12, "w");
-    rect(gd, 36, 5, 5, 1, "4");
-    rect(gd, 36, 11, 5, 1, "4");
-    rect(gd, 35, 0, 7, 2, "f");
-    rect(gd, 35, 14, 7, 3, "f");
-    outline(gd);
-    return gd;
-  }
-  function flameLayer() {
-    const gd = grid(PM_W, PM_H);
-    for (const cx of [16, 31]) {
-      rect(gd, cx - 4, 54, 9, 1, "y");
-      rect(gd, cx - 3, 55, 7, 1, "o");
-      rect(gd, cx - 2, 55, 5, 1, "y");
-      rect(gd, cx - 3, 56, 7, 1, "o");
-      rect(gd, cx - 2, 57, 5, 1, "r");
-      rect(gd, cx - 1, 57, 3, 1, "o");
-      rect(gd, cx - 1, 58, 3, 1, "r");
-      rect(gd, cx, 59, 1, 1, "r");
-    }
-    return gd;
-  }
-
-  function mechLayers(c) {
-    const L = [];
-    L.push(c.pack === 0 ? half(2, WINGS) : half(3, BOOSTERS));
-    if (c.weapon === 2) L.push(cannonLayer());
-    L.push(half(33, LEGS));
-    L.push(half(29, WAIST));
-    L.push(half(15, TORSO));
-    L.push(half(2, HEADS_PX[c.head]));
-    L.push(half(14, ARM));
-    if (c.weapon !== 2) L.push(weaponLayer(c.weapon));
-    const fl = flameLayer();
-    fl.flame = true;
-    L.push(fl);
     return L;
   }
 
-  function jetLayers() {
-    const mk = () => grid(PJ_W, PJ_H);
-    const tailFin = mk(); poly(tailFin, [[8, 12], [15, 12], [11, 2], [5, 2]], "2"); poly(tailFin, [[8, 12], [11, 12], [7, 4], [5, 4]], "@"); outline(tailFin);
-    const engine = mk(); rect(engine, 4, 11, 6, 6, "f"); rect(engine, 4, 12, 6, 1, "F"); outline(engine);
-    const body = mk();
-    poly(body, [[8, 11], [38, 9], [53, 14], [38, 18], [8, 17]], "1");
-    for (let y = 15; y < PJ_H; y++) for (let x = 0; x < PJ_W; x++) if (body[y][x] === "1") body[y][x] = "!";
-    rect(body, 12, 13, 26, 1, "3");
-    rect(body, 12, 11, 18, 1, "w");
-    outline(body);
-    const canopy = mk(); poly(canopy, [[32, 10], [40, 9], [45, 12], [33, 12]], "e"); rect(canopy, 36, 10, 3, 1, "E"); outline(canopy);
-    const wing = mk(); poly(wing, [[18, 16], [34, 16], [27, 27], [13, 27]], "2"); poly(wing, [[16, 22], [30, 22], [27, 27], [13, 27]], "@"); rect(wing, 13, 26, 4, 1, "4"); outline(wing);
-    const nose = mk(); poly(nose, [[44, 12], [54, 14], [44, 16]], "4"); outline(nose);
-    const fl = mk(); rect(fl, 0, 12, 4, 4, "o"); rect(fl, 1, 13, 3, 2, "y"); rect(fl, 0, 13, 1, 2, "r"); fl.flame = true;
-    return [tailFin, engine, wing, body, canopy, nose, fl];
+  /* ---------- class bodies (all face right) ---------- */
+  function legs(parts, def, dim) {
+    const L = layer();
+    const o = dim ? def.farLeg : 0;
+    def.leg(L, o);
+    outlineLayer(L);
+    if (dim) L.dim = true;
+    parts.push(L);
   }
 
-  function paintLayer(gd, colors, scale) {
-    const w = gd[0].length, h = gd.length;
+  const CLASSES = {
+    titan: {
+      name: "TITAN", role: "HEAVY", s: 1.25, hand: [44, 41], farLeg: 9,
+      thrusters: [[8, 41], [16, 41]],
+      leg(L, o) {
+        capsule(L, 30 + o, 44, 27 + o, 51, 5.5, "frame");
+        poly(L, [[18 + o, 49], [36 + o, 49], [38 + o, 59], [16 + o, 59]], "m1");
+        ellipse(L, 27 + o, 50, 4.5, 4, "m2");
+        poly(L, [[11 + o, 57], [41 + o, 57], [44 + o, 63], [9 + o, 63]], "m2", 1.8);
+      },
+      pack(L) {
+        poly(L, [[8, 14], [26, 12], [28, 38], [6, 40]], "m2");
+        capsule(L, 8, 16, 8, 38, 4, "frame");
+        capsule(L, 16, 15, 16, 38, 4, "frame");
+        // shoulder cannon
+        poly(L, [[18, 8], [30, 8], [30, 16], [18, 16]], "dark", 1.4);
+        capsule(L, 24, 10, 62, 10, 3, "gun");
+        poly(L, [[46, 6.5], [50, 6.5], [50, 13.5], [46, 13.5]], "m3", 1);
+        ellipse(L, 62.5, 10, 1.2, 2.2, "dark");
+      },
+      body(L) {
+        poly(L, [[18, 34], [46, 34], [48, 47], [16, 47]], "m2");
+        ellipse(L, 32, 27, 18, 15, "m1");
+        ellipse(L, 45, 27, 5, 4, "glass");
+        line(L, 20, 34, 42, 34, "m1", 1);
+        poly(L, [[22, 38], [30, 38], [30, 44], [22, 44]], "m3", 1.2);
+      },
+      head(L) {
+        ellipse(L, 42, 15, 8, 6, "m1");
+        poly(L, [[43, 13], [50, 13], [50, 16], [43, 16]], "dark", 1);
+        line(L, 45, 14, 49, 14, "eye", 4); line(L, 45, 15, 49, 15, "eye", 3);
+        line(L, 38, 9, 35, 3, "frame", 2);
+      },
+      shoulder(L) {
+        ellipse(L, 28, 24, 11, 10, "m2");
+        poly(L, [[18, 22], [38, 22], [38, 25], [18, 25]], "m3", 1);
+        capsule(L, 30, 30, 40, 40, 4.5, "frame");
+      },
+    },
+    striker: {
+      name: "STRIKER", role: "ASSAULT", s: 1, hand: [42, 38], farLeg: 7,
+      thrusters: [[11, 36], [17, 36]],
+      leg(L, o) {
+        capsule(L, 31 + o, 42, 27 + o, 49, 4, "frame");
+        poly(L, [[22 + o, 47], [33 + o, 47], [37 + o, 58], [25 + o, 58]], "m1");
+        ellipse(L, 28 + o, 48, 3.5, 3.5, "m2");
+        poly(L, [[18 + o, 56], [41 + o, 56], [43 + o, 62], [16 + o, 62]], "m2", 1.6);
+      },
+      pack(L) {
+        poly(L, [[12, 14], [24, 13], [25, 32], [11, 33]], "m2");
+        capsule(L, 11, 15, 11, 32, 3.2, "frame");
+        capsule(L, 17, 14, 17, 32, 3.2, "frame");
+        capsule(L, 20, 12, 36, 7, 2.2, "gun");
+        poly(L, [[18, 9], [24, 9], [24, 15], [18, 15]], "m3", 1.2);
+      },
+      body(L) {
+        poly(L, [[23, 34], [40, 34], [41, 43], [22, 43]], "frame");
+        ellipse(L, 32, 27, 13, 11, "m1");
+        line(L, 23, 31, 40, 31, "m1", 1);
+        poly(L, [[28, 34], [34, 34], [34, 41], [28, 41]], "m3", 1);
+      },
+      head(L) {
+        ellipse(L, 37, 15, 8.5, 7.5, "m1");
+        poly(L, [[39, 13], [46, 13], [46, 17], [39, 17]], "dark", 1);
+        line(L, 41, 14, 45, 14, "eye", 4); line(L, 41, 15, 45, 16, "eye", 3);
+        poly(L, [[30, 5], [34, 9], [31, 10]], "m3", 0.8);
+      },
+      shoulder(L) {
+        ellipse(L, 28, 24, 8.5, 7.5, "m2");
+        poly(L, [[20, 23], [36, 23], [36, 25], [20, 25]], "m3", 1);
+        capsule(L, 29, 28, 34, 36, 3.2, "frame");
+        capsule(L, 34, 37, 41, 38, 4, "m1");
+      },
+    },
+    support: {
+      name: "SUPPORT", role: "REPAIR", s: 0.78, hand: [42, 34], farLeg: 6,
+      thrusters: [[24, 33]],
+      leg(L, o) {
+        capsule(L, 33 + o, 35, 30 + o, 46, 2.6, "frame");
+        capsule(L, 30 + o, 46, 34 + o, 57, 3.2, "m1");
+        ellipse(L, 30 + o, 46, 3, 3, "m2");
+        poly(L, [[26 + o, 57], [42 + o, 57], [43 + o, 62], [25 + o, 62]], "m2", 1.4);
+      },
+      pack(L) {
+        poly(L, [[21, 17], [28, 16], [29, 31], [20, 32]], "m2");
+        capsule(L, 24, 18, 24, 31, 2.6, "frame");
+        line(L, 30, 12, 24, 2, "frame", 2); line(L, 31, 12, 25, 2, "frame", 3);
+        ellipse(L, 22, 3, 5, 2.2, "m3");
+      },
+      body(L) {
+        ellipse(L, 34, 25, 9, 9.5, "m1");
+        poly(L, [[29, 31], [39, 31], [38, 36], [30, 36]], "frame", 1.2);
+        ellipse(L, 38, 24, 3, 3, "glass");
+      },
+      head(L) {
+        ellipse(L, 38, 14, 6, 5, "m1");
+        poly(L, [[39, 12], [45, 12], [45, 15], [39, 15]], "dark", 1);
+        line(L, 41, 13, 44, 13, "eye", 4);
+      },
+      shoulder(L) {
+        ellipse(L, 31, 22, 5.5, 5, "m2");
+        line(L, 27, 22, 35, 22, "m3", 3);
+        capsule(L, 32, 25, 35, 33, 2.2, "frame");
+        capsule(L, 35, 34, 41, 34, 2.6, "m1");
+      },
+    },
+  };
+  const CLASS_KEYS = ["titan", "striker", "support"];
+
+  function mechParts(cls, weaponKind) {
+    const def = CLASSES[cls];
+    const parts = [];
+    legs(parts, def, true);
+    const pack = layer(); def.pack(pack); outlineLayer(pack); parts.push(pack);
+    const body = layer(); def.body(body); outlineLayer(body); parts.push(body);
+    const head = layer(); def.head(head); outlineLayer(head); parts.push(head);
+    legs(parts, def, false);
+    const sh = layer(); def.shoulder(sh); outlineLayer(sh); parts.push(sh);
+    parts.push(weapon(weaponKind, def.hand[0], def.hand[1], def.s));
+    const fl = layer();
+    def.thrusters.forEach(([x, y]) => {
+      for (let i = 0; i < 7; i++) for (let w = -2; w <= 2; w++) {
+        if (Math.abs(w) > 2 - i / 4) continue;
+        const t = i < 2 ? 5 : i < 4 ? 4 : i < 6 ? 2 : 1;
+        if (y + i < MH) fl.px[y + i][x + w] = ["fire", t];
+      }
+    });
+    fl.flame = true;
+    parts.push(fl);
+    return parts;
+  }
+
+  function vehicleParts(cls) {
+    const P = [];
+    const mk = (fn) => { const L = layer(); fn(L); outlineLayer(L); P.push(L); return L; };
+    let fl = layer();
+    if (cls === "titan") { // tank
+      mk((L) => { capsule(L, 10, 54, 60, 54, 7, "dark"); for (let x = 12; x <= 58; x += 9) ellipse(L, x, 54, 3.4, 3.4, "frame"); });
+      mk((L) => { poly(L, [[8, 38], [58, 38], [66, 48], [4, 48]], "m1"); poly(L, [[12, 44], [56, 44], [56, 46], [12, 46]], "m3", 1); });
+      mk((L) => { ellipse(L, 32, 34, 14, 8, "m2"); ellipse(L, 38, 32, 3, 2, "glass"); });
+      mk((L) => { capsule(L, 40, 32, 70, 31, 2.6, "gun"); poly(L, [[58, 28], [62, 28], [62, 35], [58, 35]], "m3", 1); });
+      mk((L) => { capsule(L, 20, 30, 30, 24, 1.6, "gun"); });
+      for (let i = 0; i < 4; i++) for (let w = -1; w <= 1; w++) fl.px[42 + w][3 - i] = ["fire", 4 - i];
+    } else if (cls === "striker") { // jet
+      mk((L) => { poly(L, [[8, 30], [18, 30], [12, 14], [5, 14]], "m2"); });
+      mk((L) => { capsule(L, 5, 34, 12, 34, 5, "frame"); });
+      mk((L) => { poly(L, [[22, 36], [46, 36], [34, 54], [14, 54]], "m2"); poly(L, [[14, 52], [22, 52], [22, 54], [14, 54]], "m3", 1); });
+      mk((L) => { capsule(L, 9, 34, 58, 34, 6.2, "m1"); line(L, 14, 36, 56, 36, "m3", 3); });
+      mk((L) => { poly(L, [[56, 29], [71, 34], [56, 39]], "m2", 1.8); });
+      mk((L) => { ellipse(L, 46, 29.5, 8, 3.4, "glass"); });
+      for (let i = 0; i < 6; i++) for (let w = -2; w <= 2; w++) if (Math.abs(w) <= 2 - i / 3) fl.px[34 + w][0 + (5 - i)] = ["fire", i < 2 ? 1 : i < 4 ? 3 : 5];
+    } else { // hover bike
+      mk((L) => { ellipse(L, 20, 50, 9, 3, "frame"); ellipse(L, 52, 50, 9, 3, "frame"); });
+      mk((L) => { capsule(L, 14, 41, 54, 41, 6, "m1"); line(L, 18, 43, 50, 43, "m3", 3); });
+      mk((L) => { ellipse(L, 57, 38, 9, 6.5, "m2"); ellipse(L, 60, 37, 3, 2, "glass"); });
+      mk((L) => { ellipse(L, 34, 33, 8, 4.5, "glass"); line(L, 26, 34, 20, 22, "frame", 2); ellipse(L, 19, 21, 4, 1.8, "m3"); });
+      for (const cx of [20, 52]) for (let w = -6; w <= 6; w++) { fl.px[54][cx + w] = ["beam", 4]; if (Math.abs(w) < 4) fl.px[55][cx + w] = ["beam", 2]; }
+    }
+    fl.flame = true;
+    P.push(fl);
+    return P;
+  }
+
+  function paintLayerCanvas(L, mats, scale) {
     const c = document.createElement("canvas");
-    c.width = w * scale; c.height = h * scale;
+    c.width = MW * scale; c.height = MH * scale;
     const ctx = c.getContext("2d");
-    let minX = w, minY = h, maxX = 0, maxY = 0;
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const ch = gd[y][x];
-      if (ch === "." || !colors[ch]) continue;
-      ctx.fillStyle = colors[ch];
+    let minX = MW, minY = MH, maxX = 0, maxY = 0;
+    for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
+      const p = L.px[y][x];
+      if (!p) continue;
+      let t = p[1];
+      if (L.dim && t > 0) t = Math.max(1, t - 1);
+      ctx.fillStyle = mats[p[0]][t];
       ctx.fillRect(x * scale, y * scale, scale, scale);
       minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
     }
-    c.className = "part" + (gd.flame ? " flame" : "");
-    c.style.transformOrigin = `${(((minX + maxX + 1) / 2) / w) * 100}% ${(((minY + maxY + 1) / 2) / h) * 100}%`;
+    c.className = "part" + (L.flame ? " flame" : "");
+    c.style.transformOrigin = `${((minX + maxX + 1) / 2 / MW) * 100}% ${((minY + maxY + 1) / 2 / MH) * 100}%`;
     return c;
   }
 
-  function buildPixelUnit(kind, c, P, scale = 6) {
+  function buildUnit(kind, cls, weaponKind, P, scale = 4) {
     const wrap = document.createElement("div");
-    wrap.className = kind === "jet" ? "pjet" : "pmech";
-    const colors = mechColors(P);
-    (kind === "jet" ? jetLayers() : mechLayers(c)).forEach((gd) => wrap.appendChild(paintLayer(gd, colors, scale)));
+    wrap.className = "punit " + (kind === "vehicle" ? "pveh" : "pmech");
+    const mats = materials(P);
+    (kind === "vehicle" ? vehicleParts(cls) : mechParts(cls, weaponKind)).forEach((L) => wrap.appendChild(paintLayerCanvas(L, mats, scale)));
     return wrap;
   }
 
-  const mechEl = (c = cfg) => buildPixelUnit("mech", c, PAINTS[c.paint]);
-  const jetEl = (c = cfg) => buildPixelUnit("jet", c, PAINTS[c.paint]);
+  const saved = store.get("kd3-mech", {}) || {};
+  const cfg = {
+    cls: CLASS_KEYS.includes(saved.cls) ? saved.cls : "striker",
+    paint: PAINTS[saved.paint] ? saved.paint : 0,
+    weapon: WEAPONS[saved.weapon] ? saved.weapon : 0,
+  };
+
+  function unitName(c = cfg) {
+    const num = String(CLASS_KEYS.indexOf(c.cls) * 3 + c.weapon + 1).padStart(2, "0");
+    return `${CLASS_INFO[c.cls].code}-${num} ${CLASSES[c.cls].name}`;
+  }
+  const mechEl = (c = cfg, scale = 4) => buildUnit("mech", c.cls, c.weapon, PAINTS[c.paint], scale);
+  const vehEl = (c = cfg, scale = 4) => buildUnit("vehicle", c.cls, c.weapon, PAINTS[c.paint], scale);
+
+  // one flattened canvas per unit look, for small uses (quest cards, tactics board)
+  const unitCache = new Map();
+  function unitImage(cls, weaponKind, P) {
+    const k = cls + weaponKind + P.name;
+    if (unitCache.has(k)) return unitCache.get(k);
+    const out = document.createElement("canvas");
+    out.width = MW; out.height = MH;
+    const ctx = out.getContext("2d");
+    const mats = materials(P);
+    mechParts(cls, weaponKind).filter((L) => !L.flame).forEach((L) => ctx.drawImage(paintLayerCanvas(L, mats, 1), 0, 0));
+    unitCache.set(k, out);
+    return out;
+  }
+  function copyCanvas(src) {
+    const c = document.createElement("canvas");
+    c.width = src.width; c.height = src.height;
+    c.getContext("2d").drawImage(src, 0, 0);
+    return c;
+  }
 
   /* =========================================================
      CHAPTER I — HANGAR
@@ -853,17 +930,21 @@
   const bay = $("bay");
   const bayUnit = $("bayUnit");
   const heroMech = $("heroMech");
-  let jetMode = false;
+  let vehicleMode = false;
   let hangarBusy = false;
 
   function buildOptions() {
-    const groups = { head: HEADS, paint: PAINTS, weapon: WEAPONS, pack: PACKS };
+    const groups = {
+      cls: CLASS_KEYS.map((k) => ({ value: k, name: CLASSES[k].name, sub: CLASSES[k].role })),
+      paint: PAINTS.map((p, i) => ({ ...p, value: i })),
+      weapon: WEAPONS.map((w, i) => ({ ...w, value: i })),
+    };
     document.querySelectorAll(".opt-row").forEach((row) => {
       const key = row.dataset.opt;
       row.innerHTML = "";
-      groups[key].forEach((opt, i) => {
+      groups[key].forEach((opt) => {
         const b = document.createElement("button");
-        b.setAttribute("aria-pressed", String(cfg[key] === i));
+        b.setAttribute("aria-pressed", String(cfg[key] === opt.value));
         if (key === "paint") {
           b.className = "swatch";
           b.title = opt.name;
@@ -872,13 +953,13 @@
           b.style.setProperty("--b", opt.m2);
           b.style.setProperty("--c", opt.m3);
         } else {
-          b.className = "opt-btn";
-          b.textContent = opt.name;
+          b.className = "opt-btn" + (opt.sub ? " opt-class" : "");
+          b.innerHTML = opt.sub ? `${opt.name}<small>${opt.sub}</small>` : opt.name;
         }
         b.addEventListener("click", () => {
-          if (hangarBusy || cfg[key] === i) return;
-          cfg[key] = i;
-          row.querySelectorAll("button").forEach((x, j) => x.setAttribute("aria-pressed", String(j === i)));
+          if (hangarBusy || cfg[key] === opt.value) return;
+          cfg[key] = opt.value;
+          row.querySelectorAll("button").forEach((x, j) => x.setAttribute("aria-pressed", String(groups[key][j].value === opt.value)));
           blip([660, 990], 0.04);
           renderUnit(true);
           once("hangar-custom", () => addExp(40));
@@ -889,43 +970,44 @@
   }
 
   function renderStats() {
-    const parts = [HEADS[cfg.head], WEAPONS[cfg.weapon], PACKS[cfg.pack]];
+    const base = CLASS_INFO[cfg.cls].stats, w = WEAPONS[cfg.weapon].s;
     $("stats").innerHTML = STAT_NAMES.map((n, i) => {
-      const v = Math.min(10, parts.reduce((a, p) => a + p.s[i], 0));
+      const v = Math.max(0, Math.min(10, base[i] + w[i]));
       return `<div class="stat"><span>${n}</span><span class="stat-bar">${Array.from({ length: 10 }, (_, k) => `<i class="${k < v ? "on" : ""}"></i>`).join("")}</span><b>${v}</b></div>`;
     }).join("");
   }
 
+  const modeName = () => (vehicleMode ? CLASS_INFO[cfg.cls].vehicle + " MODE" : CLASSES[cfg.cls].role + " MECH");
   function renderUnit(animate) {
-    bayUnit.replaceChildren(mechEl(), jetEl());
-    heroMech.replaceChildren(mechEl());
+    bayUnit.replaceChildren(mechEl(), vehEl());
+    heroMech.replaceChildren(mechEl(cfg, 5));
     $("unitName").textContent = unitName();
-    $("unitMode").textContent = jetMode ? "FIGHTER" : "MOBILE SUIT";
+    $("unitMode").textContent = modeName();
     renderStats();
-    store.set("kd2-mech", cfg);
-    if (animate) assemble(bayUnit.querySelector(jetMode ? ".pjet" : ".pmech"));
+    store.set("kd3-mech", cfg);
+    if (animate) assemble(bayUnit.querySelector(vehicleMode ? ".pveh" : ".pmech"));
   }
 
   const scatterPose = () =>
     `translate(${rand(-140, 140)}px, ${rand(-110, 110)}px) rotate(${rand(-300, 300)}deg) scale(.2)`;
-  function scatterOut(svg) {
-    [...svg.querySelectorAll(".part")].forEach((p, i) => {
-      p.style.transition = `transform .45s ${i * 22}ms ease-in, opacity .45s ${i * 22}ms`;
+  function scatterOut(el) {
+    [...el.querySelectorAll(".part")].forEach((p, i) => {
+      p.style.transition = `transform .45s ${i * 30}ms ease-in, opacity .45s ${i * 30}ms`;
       p.style.transform = scatterPose();
       p.style.opacity = "0";
     });
   }
-  function assemble(svg) {
-    const parts = [...svg.querySelectorAll(".part")];
+  function assemble(el) {
+    const parts = [...el.querySelectorAll(".part")];
     parts.forEach((p) => {
       p.style.transition = "none";
       p.style.transform = scatterPose();
       p.style.opacity = "0";
     });
-    svg.getBoundingClientRect();
+    el.getBoundingClientRect();
     requestAnimationFrame(() => {
       parts.forEach((p, i) => {
-        p.style.transition = `transform .55s ${i * 28}ms cubic-bezier(.3,1.4,.5,1), opacity .3s ${i * 28}ms`;
+        p.style.transition = `transform .55s ${i * 40}ms cubic-bezier(.3,1.4,.5,1), opacity .3s ${i * 40}ms`;
         p.style.transform = "";
         p.style.opacity = "";
       });
@@ -935,15 +1017,15 @@
   $("btnTransform").addEventListener("click", async () => {
     if (hangarBusy) return;
     hangarBusy = true;
-    const from = bayUnit.querySelector(jetMode ? ".pjet" : ".pmech");
+    const from = bayUnit.querySelector(vehicleMode ? ".pveh" : ".pmech");
     scatterOut(from);
     blip([220, 330, 220, 440, 330, 660], 0.06, "sawtooth");
     await wait(650);
-    jetMode = !jetMode;
-    bay.classList.toggle("jet-mode", jetMode);
-    $("unitMode").textContent = jetMode ? "FIGHTER" : "MOBILE SUIT";
+    vehicleMode = !vehicleMode;
+    bay.classList.toggle("veh-mode", vehicleMode);
+    $("unitMode").textContent = modeName();
     from.querySelectorAll(".part").forEach((p) => { p.style.transition = "none"; p.style.transform = ""; p.style.opacity = ""; });
-    assemble(bayUnit.querySelector(jetMode ? ".pjet" : ".pmech"));
+    assemble(bayUnit.querySelector(vehicleMode ? ".pveh" : ".pmech"));
     await wait(900);
     hangarBusy = false;
     once("transform", () => { addExp(60); toast("ACHIEVEMENT: MORE THAN MEETS THE EYE"); });
@@ -997,6 +1079,20 @@
       arena: "linear-gradient(180deg,#f4a261 0%,#e9c46a 45%,#8d6e4a 45.2%,#5c4033)",
       skills: [{ name: "ROCKET PUNCH", mult: 1.1 }, { name: "OVERDRIVE BEAM", mult: 0.65, all: true }],
     },
+    {
+      id: "op-ruins", type: "tactics", rank: 2, title: "Operation Iron Dawn", foe: "4 HOSTILE MECHS", icon: "striker",
+      hint: "Tactics mission. Clear the ruins and use the forest for cover.", exp: 400, gil: 300,
+      map: "ruins", mod: 0.85,
+      player: [["titan", 1, 5], ["striker", 0, 3], ["support", 1, 6]],
+      enemy: [["striker", 8, 1], ["titan", 7, 3], ["striker", 9, 4], ["support", 8, 5]],
+    },
+    {
+      id: "op-crossing", type: "tactics", rank: 3, title: "Hold the Crossing", foe: "5 HOSTILE MECHS", icon: "titan",
+      hint: "Tactics mission. One gap in the rock wall. Make them come to you.", exp: 700, gil: 520,
+      map: "crossing", mod: 1,
+      player: [["titan", 1, 2], ["striker", 0, 4], ["support", 1, 5]],
+      enemy: [["titan", 8, 2], ["striker", 9, 0], ["striker", 8, 5], ["titan", 9, 3], ["support", 9, 6]],
+    },
   ];
   const PARTY = [
     { name: "ALDO", job: "KNIGHT", sprite: "knight", hp: 150, mp: 12, spd: 1.3, atk: [20, 26], mag: [10, 13] },
@@ -1017,21 +1113,27 @@
       : `<li class="muted">Empty. Go carve something.</li>`;
   }
 
+  const UNIT_BASE_WEAPON = { titan: 0, striker: 2, support: 1 };
   function renderQuests() {
     const wrap = $("questCards");
     wrap.innerHTML = "";
     QUESTS.forEach((q, i) => {
       const card = document.createElement("article");
       card.className = "quest" + (cleared.has(q.id) ? " cleared" : "");
-      card.style.setProperty("--tilt", [-2, 1.5, -1][i] + "deg");
-      card.innerHTML = `<div class="quest-rank" aria-label="Rank ${q.rank} of 3"><b>${"★".repeat(q.rank)}</b>${"★".repeat(3 - q.rank)}</div>`;
-      card.appendChild(spriteCanvas(q.sprite, 4));
+      const tactics = q.type === "tactics";
+      card.style.setProperty("--tilt", [-2, 1.5, -1, 2, -1.5][i % 5] + "deg");
+      card.innerHTML = `<span class="quest-type ${tactics ? "qt-tac" : ""}">${tactics ? "TACTICS" : "HUNT"}</span><div class="quest-rank" aria-label="Rank ${q.rank} of 3"><b>${"★".repeat(q.rank)}</b>${"★".repeat(3 - q.rank)}</div>`;
+      if (tactics) {
+        const icon = copyCanvas(unitImage(q.icon, UNIT_BASE_WEAPON[q.icon], HOSTILE));
+        icon.className = "quest-mech";
+        card.appendChild(icon);
+      } else card.appendChild(spriteCanvas(q.sprite, 4));
       card.insertAdjacentHTML("beforeend",
         `<h3>${q.title}</h3><p><b>Target:</b> ${q.foe}<br>${q.hint}</p>` +
         `<div class="reward">REWARD ${q.gil}G · ${q.exp} EXP</div>` +
-        `<button type="button">${cleared.has(q.id) ? "HUNT AGAIN" : "ACCEPT QUEST"}</button>` +
+        `<button type="button">${tactics ? (cleared.has(q.id) ? "REDEPLOY" : "DEPLOY") : cleared.has(q.id) ? "HUNT AGAIN" : "ACCEPT QUEST"}</button>` +
         `<div class="stamp">CLEARED</div>`);
-      card.querySelector("button").addEventListener("click", () => startBattle(q));
+      card.querySelector("button").addEventListener("click", () => (tactics ? startTactics(q) : startBattle(q)));
       wrap.appendChild(card);
     });
   }
@@ -1448,8 +1550,585 @@
   }
 
   /* =========================================================
-     CHAPTER III — LOAD GAME
+     CHAPTER II·B — TACTICS OPS (grid strategy battle)
      ========================================================= */
+  const TERRAIN = {
+    ".": { name: "PLAINS", cost: 1, def: 0, avo: 0 },
+    F: { name: "FOREST", cost: 2, def: 1, avo: 20 },
+    R: { name: "RUINS", cost: 1, def: 2, avo: 10 },
+    W: { name: "ROCK", cost: 99, def: 0, avo: 0 },
+  };
+  const TMAPS = {
+    ruins: [
+      "..F...RR..",
+      ".FF.......",
+      "....WW..F.",
+      "..R.W..FF.",
+      ".......R..",
+      "F...FF....",
+      "FF........",
+    ],
+    crossing: [
+      "...F..W...",
+      ".F....W.F.",
+      "......W...",
+      "..R.......",
+      "......W.R.",
+      ".FF...W...",
+      "......W.F.",
+    ],
+  };
+  const UNIT_BASE = {
+    titan: { hp: 34, atk: 13, def: 6, mov: 3, rng: [1, 1], weapon: 0 },
+    striker: { hp: 26, atk: 12, def: 4, mov: 4, rng: [1, 2], weapon: 2 },
+    support: { hp: 21, atk: 7, def: 3, mov: 5, rng: [1, 1], heal: 10, weapon: 1 },
+  };
+  const BEATS = { titan: "striker", striker: "support", support: "titan" };
+  const SQUAD_NAMES = { titan: "BRUNO", striker: "ZEKE", support: "MIRA" };
+
+  const tEl = $("tactics");
+  const tBoard = $("tboard");
+  const tPanel = $("tpanel");
+  let T = null;
+
+  const tkey = (x, y) => x + "," + y;
+  const terrAt = (x, y) => TERRAIN[T.map[y][x]];
+  const unitAt = (x, y) => T.units.find((u) => u.hp > 0 && u.x === x && u.y === y);
+  const mdist = (ax, ay, bx, by) => Math.abs(ax - bx) + Math.abs(ay - by);
+  const living = (side) => T.units.filter((u) => u.hp > 0 && u.side === side);
+  const canHit = (u, ux, uy, tx, ty) => { const d = mdist(ux, uy, tx, ty); return d >= u.rng[0] && d <= u.rng[1]; };
+  const cellEl = (x, y) => T.cells[y * T.cols + x];
+
+  function makeUnit(side, cls, x, y, i, mod) {
+    const b = UNIT_BASE[cls];
+    const mine = side === "P" && cls === cfg.cls;
+    const hp = Math.round(b.hp * mod);
+    return {
+      id: side + i, side, cls, x, y, hp, max: hp,
+      atk: b.atk + (side === "E" ? Math.round((mod - 1) * 10) : 0), def: b.def, mov: b.mov, rng: b.rng, heal: b.heal || 0,
+      acted: false,
+      name: side === "P" ? (mine ? "KENNY" : SQUAD_NAMES[cls]) : "HOSTILE-" + "ABCDEFG"[i],
+      img: unitImage(cls, mine ? cfg.weapon : b.weapon, side === "P" ? PAINTS[cfg.paint] : HOSTILE),
+    };
+  }
+
+  function startTactics(q) {
+    blip([196, 262, 330, 392], 0.08, "square");
+    T = {
+      q, map: TMAPS[q.map], cols: 10, rows: 7, turn: 1, phase: "player",
+      sel: null, mode: "idle", reach: null, targets: [], pending: null, from: null, inspect: null,
+      busy: true, over: false,
+    };
+    T.units = [
+      ...q.player.map(([c, x, y], i) => makeUnit("P", c, x, y, i, 1)),
+      ...q.enemy.map(([c, x, y], i) => makeUnit("E", c, x, y, i, q.mod)),
+    ];
+    document.body.classList.add("locked");
+    tEl.hidden = false;
+    $("tTitle").textContent = `${"★".repeat(q.rank)} TACTICS · ${q.title.toUpperCase()}`;
+    $("tResult").hidden = true;
+    buildBoard();
+    renderPanel();
+    const run = T;
+    banner("PLAYER PHASE", "player").then(() => { if (T === run) { T.busy = false; renderPanel(); } });
+  }
+
+  function endTactics() {
+    T = null;
+    tEl.hidden = true;
+    document.body.classList.remove("locked");
+    renderQuests();
+    renderPouch();
+  }
+  function leaveTactics() {
+    if (!T) return;
+    const ok = $("tOk");
+    if (ok && !$("tResult").hidden) { ok.click(); return; }
+    const done = T.over;
+    endTactics();
+    if (!done) toast("You withdrew from the mission.");
+  }
+  $("tClose").addEventListener("click", leaveTactics);
+  tEl.addEventListener("click", (e) => { if (e.target === tEl) leaveTactics(); });
+
+  function buildBoard() {
+    tBoard.innerHTML = "";
+    tBoard.style.setProperty("--cols", T.cols);
+    tBoard.style.setProperty("--rows", T.rows);
+    for (let y = 0; y < T.rows; y++) for (let x = 0; x < T.cols; x++) {
+      const t = T.map[y][x];
+      const c = document.createElement("button");
+      c.type = "button";
+      c.className = "tcell t-" + (t === "." ? "P" : t);
+      c.setAttribute("aria-label", `${TERRAIN[t].name} at column ${x + 1}, row ${y + 1}`);
+      if (t === "F") c.appendChild(spriteCanvas("tree", 3));
+      if (t === "R") c.appendChild(spriteCanvas("ruin", 3));
+      if (t === "W") c.appendChild(spriteCanvas("rock", 4));
+      c.addEventListener("click", () => onCell(x, y));
+      tBoard.appendChild(c);
+    }
+    T.cells = [...tBoard.querySelectorAll(".tcell")];
+    T.units.forEach((u) => {
+      const el = document.createElement("div");
+      el.className = "tunit " + (u.side === "E" ? "enemy" : "ally");
+      el.appendChild(copyCanvas(u.img));
+      el.insertAdjacentHTML("beforeend", `<span class="thp"><i></i></span>`);
+      tBoard.appendChild(el);
+      u.el = el;
+      placeUnit(u);
+    });
+  }
+  function placeUnit(u) {
+    u.el.style.left = (u.x * 100) / T.cols + "%";
+    u.el.style.top = (u.y * 100) / T.rows + "%";
+    u.el.style.width = 100 / T.cols + "%";
+    u.el.style.height = 100 / T.rows + "%";
+    u.el.querySelector(".thp i").style.width = (u.hp / u.max) * 100 + "%";
+    u.el.classList.toggle("acted", u.acted);
+  }
+  function clearMarks() { T.cells.forEach((c) => c.classList.remove("mv", "atk", "heal", "sel", "threat")); }
+
+  function reach(u) {
+    const dist = new Map([[tkey(u.x, u.y), 0]]);
+    const open = [[u.x, u.y]];
+    while (open.length) {
+      open.sort((a, b) => dist.get(tkey(...a)) - dist.get(tkey(...b)));
+      const [x, y] = open.shift();
+      const d = dist.get(tkey(x, y));
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= T.cols || ny >= T.rows) continue;
+        const t = terrAt(nx, ny);
+        const o = unitAt(nx, ny);
+        if (t.cost >= 99 || (o && o.side !== u.side)) continue;
+        const nd = d + t.cost, k = tkey(nx, ny);
+        if (nd > u.mov || (dist.has(k) && dist.get(k) <= nd)) continue;
+        dist.set(k, nd);
+        open.push([nx, ny]);
+      }
+    }
+    for (const k of [...dist.keys()]) {
+      const [x, y] = k.split(",").map(Number);
+      const o = unitAt(x, y);
+      if (o && o !== u) dist.delete(k);
+    }
+    return dist;
+  }
+  const targetsFrom = (u, x, y) => living(u.side === "P" ? "E" : "P").filter((t) => canHit(u, x, y, t.x, t.y));
+  const healTargetsFrom = (u, x, y) =>
+    u.heal ? living(u.side).filter((t) => t !== u && t.hp < t.max && mdist(x, y, t.x, t.y) <= 2) : [];
+
+  function forecast(a, d) {
+    const tri = BEATS[a.cls] === d.cls ? 1 : BEATS[d.cls] === a.cls ? -1 : 0;
+    const terr = terrAt(d.x, d.y);
+    return {
+      tri,
+      dmg: Math.max(1, a.atk + tri * 3 - d.def - terr.def),
+      hit: Math.max(20, Math.min(100, 90 + tri * 10 - terr.avo)),
+    };
+  }
+
+  /* ---------- player input ---------- */
+  function onCell(x, y) {
+    if (!T || T.busy || T.over || T.phase !== "player") return;
+    const u = unitAt(x, y);
+    if (T.mode === "idle" || T.mode === "inspect") {
+      if (u && u.side === "P" && !u.acted) return select(u);
+      if (u) return inspect(u);
+      T.mode = "idle"; T.inspect = null; clearMarks(); return renderPanel();
+    }
+    if (T.mode === "move") {
+      if (T.reach.has(tkey(x, y))) return moveTo(T.sel, x, y);
+      if (u && u.side === "P" && !u.acted) return select(u);
+      return deselect();
+    }
+    if (T.mode === "target" || T.mode === "heal") {
+      if (u && T.targets.includes(u)) {
+        if (T.pending === u) return T.mode === "heal" ? doHeal(T.sel, u) : doAttack(T.sel, u);
+        T.pending = u;
+        blip(880, 0.03);
+        renderPanel();
+      }
+    }
+  }
+
+  function select(u) {
+    T.sel = u; T.mode = "move"; T.from = [u.x, u.y]; T.inspect = null;
+    T.reach = reach(u);
+    clearMarks();
+    const atkTiles = new Set();
+    for (const k of T.reach.keys()) {
+      const [x, y] = k.split(",").map(Number);
+      cellEl(x, y).classList.add("mv");
+      for (let ty = 0; ty < T.rows; ty++) for (let tx = 0; tx < T.cols; tx++)
+        if (canHit(u, x, y, tx, ty) && !T.reach.has(tkey(tx, ty))) atkTiles.add(tkey(tx, ty));
+    }
+    atkTiles.forEach((k) => { const [x, y] = k.split(",").map(Number); cellEl(x, y).classList.add("threat"); });
+    cellEl(u.x, u.y).classList.add("sel");
+    blip(660, 0.04);
+    renderPanel();
+  }
+  function inspect(u) {
+    T.mode = "inspect"; T.inspect = u; T.sel = null;
+    clearMarks();
+    const R = reach(u);
+    for (const k of R.keys()) {
+      const [x, y] = k.split(",").map(Number);
+      cellEl(x, y).classList.add(u.side === "E" ? "threat" : "mv");
+    }
+    cellEl(u.x, u.y).classList.add("sel");
+    renderPanel();
+  }
+  function deselect() {
+    T.sel = null; T.mode = "idle"; T.pending = null;
+    clearMarks();
+    renderPanel();
+  }
+  async function moveTo(u, x, y) {
+    T.busy = true;
+    clearMarks();
+    u.x = x; u.y = y;
+    placeUnit(u);
+    blip([392, 440], 0.04);
+    await wait(260);
+    if (!T) return;
+    T.busy = false;
+    T.mode = "menu";
+    cellEl(x, y).classList.add("sel");
+    renderPanel();
+  }
+  function aim(kind) {
+    const u = T.sel;
+    T.targets = kind === "heal" ? healTargetsFrom(u, u.x, u.y) : targetsFrom(u, u.x, u.y);
+    T.mode = kind === "heal" ? "heal" : "target";
+    T.pending = T.targets.length === 1 ? T.targets[0] : null;
+    clearMarks();
+    cellEl(u.x, u.y).classList.add("sel");
+    T.targets.forEach((t) => cellEl(t.x, t.y).classList.add(kind === "heal" ? "heal" : "atk"));
+    renderPanel();
+  }
+
+  async function doAttack(a, d) {
+    T.busy = true;
+    clearMarks();
+    renderPanel();
+    await combat(a, d);
+    if (T) finish(a);
+  }
+  async function doHeal(a, t) {
+    T.busy = true;
+    clearMarks();
+    const amt = Math.min(a.heal, t.max - t.hp);
+    t.hp += amt;
+    tPop(t, "+" + amt, "heal");
+    placeUnit(t);
+    blip([660, 880, 1100], 0.06, "sine");
+    await wait(550);
+    if (T) finish(a);
+  }
+  function finish(a) {
+    a.acted = true;
+    placeUnit(a);
+    T.sel = null; T.mode = "idle"; T.pending = null; T.targets = [];
+    T.busy = false;
+    clearMarks();
+    renderPanel();
+    if (checkEnd()) return;
+    if (living("P").every((u) => u.acted)) enemyPhase();
+  }
+
+  async function strike(a, d) {
+    const f = forecast(a, d);
+    a.el.style.setProperty("--dx", (d.x > a.x ? 1 : d.x < a.x ? -1 : 0) * 18 + "%");
+    a.el.style.setProperty("--dy", (d.y > a.y ? 1 : d.y < a.y ? -1 : 0) * 18 + "%");
+    a.el.classList.remove("lunge");
+    void a.el.offsetWidth;
+    a.el.classList.add("lunge");
+    await wait(200);
+    if (!T) return;
+    if (Math.random() * 100 < f.hit) {
+      d.hp = Math.max(0, d.hp - f.dmg);
+      tPop(d, f.dmg, f.tri > 0 ? "crit" : "");
+      d.el.classList.remove("hurt");
+      void d.el.offsetWidth;
+      d.el.classList.add("hurt");
+      placeUnit(d);
+      blip([180, 90], 0.05);
+      if (d.hp <= 0) {
+        d.el.classList.add("dead");
+        blip([300, 200, 120, 80], 0.08, "sawtooth");
+      }
+    } else {
+      tPop(d, "MISS", "miss");
+      blip(1200, 0.04, "triangle");
+    }
+    await wait(450);
+  }
+  async function combat(a, d) {
+    await strike(a, d);
+    if (T && d.hp > 0 && a.hp > 0 && canHit(d, d.x, d.y, a.x, a.y)) await strike(d, a);
+  }
+  function tPop(u, text, cls) {
+    const p = document.createElement("div");
+    p.className = "dmg tpop " + (cls || "");
+    p.textContent = text;
+    p.style.left = ((u.x + 0.5) * 100) / T.cols + "%";
+    p.style.top = (u.y * 100) / T.rows + "%";
+    tBoard.appendChild(p);
+    setTimeout(() => p.remove(), 1000);
+  }
+
+  function banner(text, kind) {
+    const b = $("phaseBanner");
+    b.textContent = text;
+    b.className = "phase-banner show " + kind;
+    blip(kind === "player" ? [523, 659, 784] : [392, 311, 262], 0.09, "square");
+    return wait(1150).then(() => { b.className = "phase-banner"; });
+  }
+
+  /* ---------- enemy phase ---------- */
+  async function enemyPhase() {
+    if (!T || T.over) return;
+    const run = T;
+    T.phase = "enemy";
+    T.busy = true;
+    clearMarks();
+    renderPanel();
+    await banner("ENEMY PHASE", "enemy");
+    for (const e of living("E")) {
+      if (T !== run || T.over) return;
+      if (e.hp <= 0) continue;
+      await enemyAct(e);
+      if (checkEnd()) return;
+    }
+    if (T !== run) return;
+    T.turn++;
+    T.units.forEach((u) => { u.acted = false; placeUnit(u); });
+    T.phase = "player";
+    renderPanel();
+    await banner("PLAYER PHASE", "player");
+    if (T === run) { T.busy = false; renderPanel(); }
+  }
+
+  async function enemyAct(e) {
+    const R = reach(e);
+    let best = null;
+    for (const [k, cost] of R) {
+      const [x, y] = k.split(",").map(Number);
+      if (e.heal) {
+        for (const a of living("E")) {
+          if (a === e || a.hp >= a.max * 0.6 || mdist(x, y, a.x, a.y) > 2) continue;
+          const s = 20 + (a.max - a.hp);
+          if (!best || s > best.s) best = { s, x, y, heal: a };
+        }
+      }
+      for (const p of living("P")) {
+        if (!canHit(e, x, y, p.x, p.y)) continue;
+        const f = forecast(e, p);
+        let s = (f.dmg * f.hit) / 100 + (f.dmg >= p.hp ? 30 : 0) + terrAt(x, y).def - cost * 0.1;
+        if (!canHit(p, p.x, p.y, x, y)) s += 2;
+        if (!best || s > best.s) best = { s, x, y, target: p };
+      }
+    }
+    if (!best) {
+      const players = living("P");
+      let bx = e.x, by = e.y, bd = Infinity;
+      for (const k of R.keys()) {
+        const [x, y] = k.split(",").map(Number);
+        const d = Math.min(...players.map((p) => mdist(x, y, p.x, p.y)));
+        if (d < bd) { bd = d; bx = x; by = y; }
+      }
+      best = { x: bx, y: by };
+    }
+    cellEl(e.x, e.y).classList.add("threat");
+    await wait(200);
+    if (!T) return;
+    clearMarks();
+    if (best.x !== e.x || best.y !== e.y) {
+      e.x = best.x; e.y = best.y;
+      placeUnit(e);
+      blip([330, 294], 0.04);
+      await wait(320);
+    }
+    if (!T) return;
+    if (best.heal) {
+      const amt = Math.min(e.heal, best.heal.max - best.heal.hp);
+      best.heal.hp += amt;
+      tPop(best.heal, "+" + amt, "heal");
+      placeUnit(best.heal);
+      await wait(500);
+    } else if (best.target) {
+      await combat(e, best.target);
+    } else {
+      await wait(150);
+    }
+  }
+
+  function checkEnd() {
+    if (!T || T.over) return true;
+    if (!living("E").length) { tVictory(); return true; }
+    if (!living("P").length) { tDefeat(); return true; }
+    return false;
+  }
+
+  async function tVictory() {
+    T.over = true;
+    T.busy = true;
+    renderPanel();
+    await wait(600);
+    if (!T) return;
+    FANFARE();
+    const q = T.q, parts = Math.floor(rand(2, 5));
+    showTResult(
+      `<h3>MISSION COMPLETE</h3><p>TURNS ...... ${T.turn}</p><p>EXP ........ +${q.exp}</p><p>GIL ........ +${q.gil}</p>` +
+      `<p>SALVAGED ... Mech Parts ×${parts}</p><div class="row"><button class="btn" id="tOk">CONTINUE</button></div>`,
+      () => $("tOk").addEventListener("click", () => {
+        $("tResult").hidden = true;
+        addExp(q.exp);
+        addGil(q.gil);
+        loot["Mech Parts"] = (loot["Mech Parts"] || 0) + parts;
+        store.set("kd2-loot", loot);
+        if (!cleared.has(q.id)) {
+          cleared.add(q.id);
+          store.set("kd2-cleared", [...cleared]);
+          once("tactician", () => setTimeout(() => toast("ACHIEVEMENT: MASTER TACTICIAN"), 900));
+        }
+        endTactics();
+      })
+    );
+  }
+  async function tDefeat() {
+    T.over = true;
+    T.busy = true;
+    renderPanel();
+    await wait(600);
+    if (!T) return;
+    blip([392, 330, 262, 196], 0.2, "triangle");
+    const q = T.q;
+    showTResult(
+      `<h3>MISSION FAILED</h3><p>Your squad was pushed back.</p><p class="muted">Hint: use forest and ruins for cover, and mind the class triangle.</p>` +
+      `<div class="row"><button class="btn btn-alt" id="tRetry">RETRY</button><button class="btn" id="tBack">RETURN</button></div>`,
+      () => {
+        $("tRetry").addEventListener("click", () => startTactics(q));
+        $("tBack").addEventListener("click", endTactics);
+      }
+    );
+  }
+  function showTResult(html, bind) {
+    const r = $("tResult");
+    r.innerHTML = `<div class="window">${html}</div>`;
+    r.hidden = false;
+    bind();
+    const first = r.querySelector("button");
+    if (first) first.focus();
+  }
+
+  /* ---------- side panel ---------- */
+  function unitCard(u) {
+    const terr = terrAt(u.x, u.y);
+    return `<div class="tp-unit ${u.side === "P" ? "ally" : "enemy"}">
+      <div class="tp-portrait"></div>
+      <div class="tp-id"><b>${u.name}</b><small>${CLASSES[u.cls].name} · ${u.side === "P" ? "ALLY" : "HOSTILE"}</small>
+        <div class="hpbar ${u.hp / u.max < 0.3 ? "low" : ""}"><i style="width:${(u.hp / u.max) * 100}%"></i></div>
+        <small>HP ${u.hp}/${u.max}</small></div>
+    </div>
+    <div class="tp-stats"><span>ATK <b>${u.atk}</b></span><span>DEF <b>${u.def}</b></span><span>MOV <b>${u.mov}</b></span>
+      <span>RNG <b>${u.rng[0] === u.rng[1] ? u.rng[0] : u.rng.join("-")}</b></span>${u.heal ? `<span>HEAL <b>${u.heal}</b></span>` : ""}</div>
+    <p class="tp-terr">ON ${terr.name}${terr.def || terr.avo ? ` · DEF +${terr.def} · AVO +${terr.avo}` : ""}</p>`;
+  }
+  function fcHTML(a, d) {
+    const f = forecast(a, d);
+    const g = canHit(d, d.x, d.y, a.x, a.y) ? forecast(d, a) : null;
+    const arrow = (t) => (t > 0 ? ` <i class="up">▲</i>` : t < 0 ? ` <i class="down">▼</i>` : "");
+    return `<div class="tp-fc">
+      <div><b>${a.name}</b><span>HP ${a.hp}</span><span>DMG ${f.dmg}${arrow(f.tri)}</span><span>HIT ${f.hit}%</span></div>
+      <div><b>${d.name}</b><span>HP ${d.hp}</span><span>DMG ${g ? g.dmg + arrow(g.tri) : "–"}</span><span>HIT ${g ? g.hit + "%" : "–"}</span></div>
+    </div>`;
+  }
+  function renderPanel() {
+    if (!T) return;
+    const u = T.mode === "inspect" ? T.inspect : T.sel;
+    let h = `<div class="tp-head"><span>TURN ${T.turn}</span><b class="${T.phase}">${T.phase === "player" ? "PLAYER PHASE" : "ENEMY PHASE"}</b></div>`;
+    if (u) h += unitCard(u);
+    else h += `<p class="tp-hint">${T.phase === "player" ? "Pick one of your units to see where it can move. Tap an enemy to see its range." : "The enemy is moving..."}</p>`;
+
+    if (T.mode === "menu") {
+      const canAtk = targetsFrom(T.sel, T.sel.x, T.sel.y).length > 0;
+      const canHeal = healTargetsFrom(T.sel, T.sel.x, T.sel.y).length > 0;
+      h += `<div class="tp-actions">
+        ${canAtk ? `<button class="tbtn" data-act="attack">ATTACK</button>` : ""}
+        ${canHeal ? `<button class="tbtn" data-act="heal">REPAIR</button>` : ""}
+        <button class="tbtn" data-act="wait">WAIT</button>
+        <button class="tbtn ghost" data-act="back">UNDO MOVE</button></div>`;
+    } else if (T.mode === "target" || T.mode === "heal") {
+      if (T.pending) {
+        h += T.mode === "heal"
+          ? `<p class="tp-hint">${T.pending.name}: HP ${T.pending.hp} → ${Math.min(T.pending.max, T.pending.hp + T.sel.heal)}</p>`
+          : fcHTML(T.sel, T.pending);
+        h += `<div class="tp-actions"><button class="tbtn go" data-act="confirm">${T.mode === "heal" ? "REPAIR" : "CONFIRM ATTACK"}</button><button class="tbtn ghost" data-act="cancel">BACK</button></div>`;
+      } else {
+        h += `<p class="tp-hint">Pick a highlighted ${T.mode === "heal" ? "ally" : "target"}.</p><div class="tp-actions"><button class="tbtn ghost" data-act="cancel">BACK</button></div>`;
+      }
+    }
+    const left = living("P").filter((x) => !x.acted).length;
+    h += `<div class="tp-foot"><span>${living("P").length} ALLIES · ${living("E").length} HOSTILES</span>
+      <button class="btn btn-alt" data-act="end" ${T.phase !== "player" || T.busy || T.over ? "disabled" : ""}>END TURN${left ? ` (${left})` : ""}</button></div>
+      <p class="tp-tri">TITAN > STRIKER > SUPPORT > TITAN<br><small>Advantage: +3 damage, +10 hit</small></p>`;
+    tPanel.innerHTML = h;
+    const portrait = tPanel.querySelector(".tp-portrait");
+    if (portrait && u) portrait.appendChild(copyCanvas(u.img));
+  }
+  tPanel.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-act]");
+    if (!b || !T || b.disabled) return;
+    const act = b.dataset.act;
+    blip(1046, 0.03);
+    if (act === "end") { if (!T.busy && T.phase === "player") { deselect(); enemyPhase(); } return; }
+    if (T.busy) return;
+    if (act === "attack") aim("attack");
+    else if (act === "heal") aim("heal");
+    else if (act === "wait") finish(T.sel);
+    else if (act === "back") { const u = T.sel; u.x = T.from[0]; u.y = T.from[1]; placeUnit(u); select(u); }
+    else if (act === "confirm" && T.pending) (T.mode === "heal" ? doHeal : doAttack)(T.sel, T.pending);
+    else if (act === "cancel") { T.mode = "menu"; T.pending = null; clearMarks(); cellEl(T.sel.x, T.sel.y).classList.add("sel"); renderPanel(); }
+  });
+
+  /* =========================================================
+     CHAPTER III — STATUS (work, skills, interests)
+     ========================================================= */
+  const SKILL_GROUPS = [
+    { title: "SALES & CUSTOMER SUCCESS", tag: "ABILITIES", icon: "star", items: [
+      "B2B SaaS Sales", "Inbound & Outbound Sales", "Discovery Calls", "Product Demonstrations", "Consultative Selling",
+      "Lead Qualification", "Pipeline Management", "Account Management", "Customer Success", "Business Development",
+      "Relationship Management",
+    ] },
+    { title: "CRM & SALES TOOLS", tag: "EQUIPMENT", icon: "shield", items: ["HubSpot", "Salesforce", "Clay", "LinkedIn Sales Navigator"] },
+    { title: "TECHNICAL", tag: "TECH", icon: "gem", items: ["Ruby on Rails", "JavaScript", "Vue.js", "PostgreSQL", "Tailwind CSS", "Git"] },
+  ];
+  const JOURNEY = [
+    { org: "Respyre", role: "Product & Sales Specialist", when: "2025 – NOW", where: "Remote", active: true,
+      text: "Enterprise sales support for sustainability technology in infrastructure and construction: discovery, demos, and the full sales cycle." },
+    { org: "The Modern Hotelier", role: "Sales Specialist", when: "2025", where: "Remote",
+      text: "Qualified inbound and outbound leads, ran discovery conversations, and kept the hospitality-tech pipeline moving." },
+    { org: "GAIN Advisors", role: "Digital Operations & Automation Assistant", when: "2024 – NOW", where: "Remote", active: true,
+      text: "Scheduling, sales reports, proposals, and lead tracking in support of business development." },
+    { org: "Personal Virtual Assistant", role: "Virtual Assistant", when: "2024 – NOW", where: "Remote", active: true,
+      text: "Admin support, project milestones, documentation, and vendor coordination across concurrent engagements." },
+    { org: "Sumber Walet Alam", role: "Technology Specialist", when: "2021 – NOW", where: "Batam", active: true,
+      text: "Introduced software and workflow improvements, documented processes, and ran digital marketing." },
+    { org: "Sumber Batam Indah", role: "Technology Specialist", when: "2021 – NOW", where: "Batam", active: true,
+      text: "Technical support, infrastructure upkeep, new software rollouts, and cost optimization." },
+    { org: "Wijaya Food Batam", role: "Founder", when: "2021", where: "Batam",
+      text: "Launched and ran a small business from concept through daily operations." },
+    { org: "Ciputra Group", role: "Graphic Designer", when: "2019 – 2021", where: "Batam",
+      text: "Designed digital, print, and advertising creative for property marketing campaigns." },
+    { org: "SMK Finance", role: "Credit Marketing Officer", when: "2016 – 2019", where: "Batam",
+      text: "Prospected new customers, consulted on financing needs, and negotiated financing options." },
+  ];
+  const TRAINING = [
+    { org: "Le Wagon", what: "Full Stack Web Development", when: "2023", where: "Bali, Indonesia", icon: "sword" },
+    { org: "Universitas Internasional Batam", what: "Computer Science", when: "2020", where: "Batam, Indonesia", icon: "crystal" },
+  ];
   const FILES = [
     { name: "MECHA", sub: "Gundam · Transformers · every giant robot", sprite: "minimech", lv: "LV 99", time: "999:59",
       loc: "Hangar Bay 03", tags: ["Transforming", "Launch sequences", "Beam sabers"],
@@ -1470,44 +2149,107 @@
       loc: "The last save point", tags: ["Turn-based", "Action", "Grinding"],
       line: "Turn-based, action, tactics, all of it. Grinding XP at 3 AM." },
   ];
-  const fileList = $("fileList");
-  const fileDetail = $("fileDetail");
-  let fileTimer;
+  const skillCount = SKILL_GROUPS.reduce((a, g) => a + g.items.length, 0);
 
+  const statusPanel = $("statusPanel");
+  const statusTabsEl = $("statusTabs");
+
+  function tabStatus() {
+    statusPanel.innerHTML = `
+      <div class="st-top">
+        <div class="st-portrait"></div>
+        <div>
+          <h3>KENNY DEVIN WIJAYA</h3>
+          <p class="st-job">PRODUCT &amp; SALES SPECIALIST</p>
+          <p class="st-loc">BATAM, INDONESIA · WORKS REMOTE</p>
+        </div>
+      </div>
+      <p class="st-bio">Sales and customer success, backed by a full-stack web toolkit. Discovery calls, demos and pipelines on one side; Ruby on Rails, Vue.js and PostgreSQL on the other.</p>
+      <div class="st-stats">
+        <div><span>CURRENT QUEST</span><b>Respyre · Product &amp; Sales</b></div>
+        <div><span>IN THE FIELD SINCE</span><b>2016</b></div>
+        <div><span>ROLES HELD</span><b>${JOURNEY.length}</b></div>
+        <div><span>SKILLS</span><b>${skillCount}</b></div>
+      </div>
+      <div class="st-contact">
+        <a class="tbtn" href="mailto:kendevxz@gmail.com">✉ kendevxz@gmail.com</a>
+        <a class="tbtn ghost" href="https://github.com/kendevxz" rel="noopener">GitHub · kendevxz</a>
+      </div>`;
+    statusPanel.querySelector(".st-portrait").appendChild(spriteCanvas("pilot", 7));
+  }
+
+  function tabSkills() {
+    statusPanel.innerHTML = `<div class="sk-grid">${SKILL_GROUPS.map((g) => `
+      <div class="sk-group"><h4><span class="sk-icon" data-icon="${g.icon}"></span>${g.title}<small>${g.tag}</small></h4>
+        <ul>${g.items.map((s) => `<li>${s}</li>`).join("")}</ul></div>`).join("")}</div>`;
+    statusPanel.querySelectorAll(".sk-icon").forEach((el) => el.appendChild(spriteCanvas(el.dataset.icon, 2)));
+  }
+
+  function tabJourney() {
+    statusPanel.innerHTML = `<ol class="journey">${JOURNEY.map((j) => `
+      <li class="${j.active ? "active" : ""}">
+        <span class="j-when">${j.when}</span>
+        <div class="j-body"><b>${j.org}</b>${j.active ? `<em>ACTIVE</em>` : ""}<span class="j-role">${j.role} · ${j.where}</span><p>${j.text}</p></div>
+      </li>`).join("")}</ol>`;
+  }
+
+  function tabTraining() {
+    statusPanel.innerHTML = `<div class="tr-list">${TRAINING.map((t) => `
+      <div class="tr-card"><span class="tr-icon" data-icon="${t.icon}"></span>
+        <div><span class="j-when">${t.when}</span><b>${t.org}</b><p>${t.what}</p><small>${t.where}</small></div></div>`).join("")}</div>`;
+    statusPanel.querySelectorAll(".tr-icon").forEach((el) => el.appendChild(spriteCanvas(el.dataset.icon, 5)));
+  }
+
+  let fileTimer;
+  function tabFiles() {
+    statusPanel.innerHTML = `<div class="files-grid"><div class="file-list" role="listbox" aria-label="Save files"></div><div class="file-detail" aria-live="polite"></div></div>`;
+    const list = statusPanel.querySelector(".file-list");
+    FILES.forEach((f, i) => {
+      const b = document.createElement("button");
+      b.className = "slot";
+      b.setAttribute("role", "option");
+      b.innerHTML =
+        `<span class="slot-icon"></span><span class="slot-title">${f.name}<small>${f.sub}</small></span>` +
+        `<span class="slot-meta">${f.lv}<span>${f.time}</span></span>`;
+      b.querySelector(".slot-icon").appendChild(spriteCanvas(f.sprite, 3));
+      b.addEventListener("click", () => showFile(i));
+      list.appendChild(b);
+    });
+    showFile(0, true);
+  }
   function showFile(i, instant) {
     const f = FILES[i];
-    fileList.querySelectorAll(".slot").forEach((b, j) => b.setAttribute("aria-selected", String(j === i)));
+    const detail = statusPanel.querySelector(".file-detail");
+    if (!detail) return;
+    statusPanel.querySelectorAll(".slot").forEach((b, j) => b.setAttribute("aria-selected", String(j === i)));
     const render = () => {
-      const art = document.createElement("div");
-      art.className = "art";
-      art.appendChild(spriteCanvas(f.sprite, 10));
-      fileDetail.innerHTML =
-        `<h3>${f.name}</h3><div class="loc">LOCATION · ${f.loc}<br>PLAYTIME · ${f.time}</div>` +
+      if (!detail.isConnected) return;
+      detail.innerHTML =
+        `<div class="art"></div><h3>${f.name}</h3><div class="loc">LOCATION · ${f.loc}<br>PLAYTIME · ${f.time}</div>` +
         `<p>${f.line}</p><div class="tags">${f.tags.map((t) => `<span>${t}</span>`).join("")}</div>`;
-      fileDetail.prepend(art);
-      fileDetail.firstChild.animate([{ transform: "scale(.4)", opacity: 0 }, { transform: "scale(1)", opacity: 1 }], { duration: 300, easing: "cubic-bezier(.3,1.5,.5,1)" });
+      detail.querySelector(".art").appendChild(spriteCanvas(f.sprite, 8));
     };
     clearTimeout(fileTimer);
     if (instant) return render();
-    fileDetail.innerHTML = `<p class="loading">LOADING FILE ${i + 1}...</p>`;
+    detail.innerHTML = `<p class="loading">LOADING FILE ${i + 1}...</p>`;
     blip([660, 880, 990], 0.05);
-    fileTimer = setTimeout(render, 420);
+    fileTimer = setTimeout(render, 380);
     once("file-" + i, () => addExp(25));
   }
 
-  FILES.forEach((f, i) => {
-    const b = document.createElement("button");
-    b.className = "slot";
-    b.setAttribute("role", "option");
-    b.innerHTML =
-      `<span class="slot-num">FILE ${i + 1}</span><span class="slot-icon"></span>` +
-      `<span class="slot-title">${f.name}<small>${f.sub}</small></span>` +
-      `<span class="slot-meta">${f.lv}<span>${f.time}</span></span>`;
-    b.querySelector(".slot-icon").appendChild(spriteCanvas(f.sprite, 3));
-    b.addEventListener("click", () => showFile(i));
-    fileList.appendChild(b);
+  const TABS = { status: tabStatus, skills: tabSkills, journey: tabJourney, training: tabTraining, files: tabFiles };
+  statusTabsEl.querySelectorAll(".menu-item").forEach((b) => {
+    b.addEventListener("click", () => {
+      statusTabsEl.querySelectorAll(".menu-item").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+      TABS[b.dataset.tab]();
+      blip(1046, 0.04);
+      once("tab-" + b.dataset.tab, () => addExp(15));
+    });
   });
-  showFile(0, true);
+  const statusMenu = bindMenu(statusTabsEl);
+  if (document.fonts) document.fonts.ready.then(() => statusMenu.refresh());
+  window.addEventListener("resize", () => statusMenu.refresh());
+  tabStatus();
 
   /* =========================================================
      CHAPTER IV — TOY CHEST PHYSICS
@@ -1692,6 +2434,10 @@
       return;
     }
 
+    if (T) {
+      if (e.key === "Escape") { e.preventDefault(); leaveTactics(); }
+      return;
+    }
     if (B) {
       if (e.key === "Escape" && !cmdEl.dataset.sub) { e.preventDefault(); leaveBattle(); return; }
       if (!B.menu) return;

@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kenny — Mecha RPG</title>
-  <meta name="description" content="Kenny's corner of the internet: build and launch a mech, take on hunting quests in a JRPG battle, and dig through a chest full of toys.">
+  <title>Kenny Devin Wijaya</title>
+  <meta name="description" content="Kenny Devin Wijaya: product and sales specialist with a full-stack toolkit, based in Batam, Indonesia. Also: mechs, JRPGs, and toys.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%230a0f2c'/><path d='M8 1l4 6-4 8-4-8z' fill='%237df9ff'/><path d='M8 1l4 6H4z' fill='%23fff' opacity='.7'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,7 +24,7 @@
     <nav class="hud-nav" aria-label="Sections">
       <a href="#hangar">HANGAR</a>
       <a href="#quests">QUESTS</a>
-      <a href="#files">FILES</a>
+      <a href="#status">STATUS</a>
       <a href="#chest">TOYS</a>
     </nav>
     <div class="hud-right">
@@ -38,14 +38,15 @@
     <canvas id="stars" class="stars" aria-hidden="true"></canvas>
     <div class="title-grid">
       <div class="title-left">
-        <p class="kicker">A MECHA · RPG · TOY ADVENTURE</p>
+        <p class="kicker">PRODUCT &amp; SALES · FULL-STACK WEB · BATAM, ID</p>
         <h1 class="logo">KENNY<span class="logo-crystal" aria-hidden="true"></span></h1>
+        <p class="intro">Sales and customer success with a full-stack toolkit. Off the clock: mechs, JRPGs, and toys.</p>
         <p class="typer"><span id="typer"></span><span class="caret">▌</span></p>
 
         <div class="window menu" id="titleMenu" role="menu" aria-label="Main menu">
           <button role="menuitem" data-go="#hangar" class="menu-item active">NEW GAME</button>
           <button role="menuitem" data-go="#quests" class="menu-item">CONTINUE</button>
-          <button role="menuitem" data-go="#files" class="menu-item">LOAD GAME</button>
+          <button role="menuitem" data-go="#status" class="menu-item">STATUS</button>
           <button role="menuitem" data-go="config" class="menu-item">CONFIG <small id="cfgState">SOUND OFF</small></button>
           <span class="cursor" id="menuCursor" aria-hidden="true"></span>
         </div>
@@ -81,7 +82,7 @@
     <header class="chapter-head">
       <span class="chapter-num">CHAPTER I</span>
       <h2>The Hangar</h2>
-      <p>Pick your parts, paint it, transform it, and launch.</p>
+      <p>Pick a class, paint it, arm it, then transform it or launch it.</p>
     </header>
 
     <div class="hangar-grid">
@@ -92,7 +93,7 @@
         <div class="bay-floor" aria-hidden="true"></div>
         <div class="bay-readout">
           <span>UNIT</span><b id="unitName">RX-01 VANGUARD</b>
-          <span>MODE</span><b id="unitMode">MOBILE SUIT</b>
+          <span>MODE</span><b id="unitMode">ASSAULT MECH</b>
         </div>
         <div class="launch-fx" id="launchFx" aria-hidden="true">
           <div class="speedlines"></div>
@@ -103,8 +104,8 @@
       <div class="window config">
         <h3>UNIT CONFIG</h3>
         <div class="opt">
-          <span class="opt-label">HEAD</span>
-          <div class="opt-row" data-opt="head"></div>
+          <span class="opt-label">CLASS</span>
+          <div class="opt-row" data-opt="cls"></div>
         </div>
         <div class="opt">
           <span class="opt-label">PAINT</span>
@@ -113,10 +114,6 @@
         <div class="opt">
           <span class="opt-label">WEAPON</span>
           <div class="opt-row" data-opt="weapon"></div>
-        </div>
-        <div class="opt">
-          <span class="opt-label">PACK</span>
-          <div class="opt-row" data-opt="pack"></div>
         </div>
         <div class="stats" id="stats"></div>
         <div class="config-actions">
@@ -132,7 +129,7 @@
     <header class="chapter-head">
       <span class="chapter-num">CHAPTER II</span>
       <h2>Quest Board</h2>
-      <p>Take a hunt. Find the weakness, knock it down, then go all-out.</p>
+      <p>Hunts are real-time JRPG battles. Tactics ops are grid battles with your mech squad.</p>
     </header>
 
     <div class="board">
@@ -144,21 +141,28 @@
           <p><b>TIP</b> Hit a weakness for <em>WEAK! · 1 MORE</em>.</p>
           <p><b>TIP</b> Knocked-down foes open an <em>ALL-OUT ATTACK</em>.</p>
           <p><b>TIP</b> The pilot can call in your mech from the Hangar.</p>
+          <p><b>TIP</b> Tactics: <em>TITAN ▸ STRIKER ▸ SUPPORT ▸ TITAN</em>. Forest and ruins give cover.</p>
         </div>
       </aside>
     </div>
   </section>
 
-  <!-- ============ CHAPTER 3: LOAD GAME ============ -->
-  <section class="chapter files" id="files">
+  <!-- ============ CHAPTER 3: STATUS ============ -->
+  <section class="chapter status" id="status">
     <header class="chapter-head">
       <span class="chapter-num">CHAPTER III</span>
-      <h2>Load Game</h2>
-      <p>The worlds I keep coming back to. Pick a save file.</p>
+      <h2>Status</h2>
+      <p>Work, skills, and the worlds I keep coming back to.</p>
     </header>
-    <div class="files-grid">
-      <div class="window file-list" id="fileList" role="listbox" aria-label="Save files"></div>
-      <div class="window file-detail" id="fileDetail" aria-live="polite"></div>
+    <div class="status-grid">
+      <div class="window menu status-tabs" id="statusTabs" role="tablist" aria-label="Status menu">
+        <button class="menu-item active" role="tab" data-tab="status" aria-selected="true">STATUS</button>
+        <button class="menu-item" role="tab" data-tab="skills" aria-selected="false">SKILLS</button>
+        <button class="menu-item" role="tab" data-tab="journey" aria-selected="false">JOURNEY</button>
+        <button class="menu-item" role="tab" data-tab="training" aria-selected="false">TRAINING</button>
+        <button class="menu-item" role="tab" data-tab="files" aria-selected="false">FILES</button>
+      </div>
+      <div class="window status-panel" id="statusPanel" role="tabpanel" aria-live="polite"></div>
     </div>
   </section>
 
@@ -195,6 +199,7 @@
     </div>
     <div class="credits">
       <p class="credits-site">kennydev.in</p>
+      <p><a href="mailto:kendevxz@gmail.com">kendevxz@gmail.com</a></p>
       <p><a href="https://github.com/kendevxz" rel="noopener">github / kendevxz</a></p>
       <p class="muted small">A fan-made tribute. Series names belong to their respective owners. All art is original and drawn in code.</p>
     </div>
@@ -221,6 +226,22 @@
       </div>
       <div class="aoa" id="aoa" aria-hidden="true"><span>ALL-OUT</span><span>ATTACK!</span></div>
       <div class="result" id="result" hidden></div>
+    </div>
+  </div>
+
+  <!-- ============ TACTICS POP-UP ============ -->
+  <div class="battle" id="tactics" hidden>
+    <div class="battle-box tbox" role="dialog" aria-modal="true" aria-labelledby="tTitle">
+      <div class="battle-bar">
+        <span id="tTitle">TACTICS</span>
+        <button class="battle-close" id="tClose" aria-label="Withdraw from the mission">✕</button>
+      </div>
+      <div class="tac">
+        <div class="tboard-wrap"><div class="tboard" id="tboard"></div></div>
+        <aside class="window tpanel" id="tpanel"></aside>
+      </div>
+      <div class="phase-banner" id="phaseBanner" aria-live="polite"></div>
+      <div class="result" id="tResult" hidden></div>
     </div>
   </div>
 
