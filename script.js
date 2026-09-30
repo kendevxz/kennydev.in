@@ -459,14 +459,13 @@
       cursor.setAttribute("aria-hidden", "true");
       el.appendChild(cursor);
     }
-    if (!cursor.firstChild) cursor.appendChild(spriteCanvas("hand", 2));
     const set = (i) => {
       if (!items.length) return;
       idx = (i + items.length) % items.length;
       items.forEach((b, j) => b.classList.toggle("active", j === idx));
       const b = items[idx];
-      cursor.style.top = b.offsetTop + b.offsetHeight / 2 - 8 + "px";
-      cursor.style.left = b.offsetLeft - 34 + "px";
+      cursor.style.top = b.offsetTop + b.offsetHeight / 2 - 4 + "px";
+      cursor.style.left = b.offsetLeft + 10 + "px";
     };
     items.forEach((b, i) => b.addEventListener("mouseenter", () => set(i)));
     cursor.style.transition = "none";
@@ -2494,137 +2493,6 @@
   if (document.fonts) document.fonts.ready.then(() => statusMenu.refresh());
   window.addEventListener("resize", () => statusMenu.refresh());
   tabStatus();
-
-  /* =========================================================
-     CHAPTER IV — TOY CHEST PHYSICS
-     ========================================================= */
-  const toyBox = $("toybox");
-  const toys = [];
-  let floatMode = false;
-  let boxVisible = false;
-  let bw = toyBox.clientWidth, bh = toyBox.clientHeight;
-  new ResizeObserver(() => { bw = toyBox.clientWidth; bh = toyBox.clientHeight; }).observe(toyBox);
-
-  function addToy(name = pick(TOYS), x, y) {
-    const scale = Math.round(rand(4, 6));
-    const el = spriteCanvas(name, scale);
-    el.className = "toy";
-    el.title = TOY_NAMES[name];
-    toyBox.appendChild(el);
-    const t = {
-      el, name, w: el.width, h: el.height,
-      x: x ?? rand(20, Math.max(40, bw - el.width - 20)),
-      y: y ?? rand(0, Math.max(10, bh * 0.5)),
-      vx: rand(-3, 3), vy: 0, rot: rand(-20, 20), vr: rand(-4, 4), drag: null,
-    };
-    t.r = Math.max(t.w, t.h) / 2;
-    toys.push(t);
-    el.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      el.setPointerCapture(e.pointerId);
-      el.classList.add("dragging");
-      const r = toyBox.getBoundingClientRect();
-      t.drag = { ox: e.clientX - r.left - t.x, oy: e.clientY - r.top - t.y, lx: e.clientX, ly: e.clientY, lt: performance.now() };
-      t.vx = t.vy = 0;
-      blip(440, 0.04);
-    });
-    el.addEventListener("pointermove", (e) => {
-      if (!t.drag) return;
-      const r = toyBox.getBoundingClientRect();
-      const now = performance.now();
-      const dt = Math.max(1, now - t.drag.lt) / 16;
-      t.vx = (e.clientX - t.drag.lx) / dt;
-      t.vy = (e.clientY - t.drag.ly) / dt;
-      t.drag.lx = e.clientX; t.drag.ly = e.clientY; t.drag.lt = now;
-      t.x = e.clientX - r.left - t.drag.ox;
-      t.y = e.clientY - r.top - t.drag.oy;
-    });
-    const release = () => {
-      if (!t.drag) return;
-      t.drag = null;
-      el.classList.remove("dragging");
-      t.vr = t.vx * 1.5;
-      if (Math.hypot(t.vx, t.vy) > 18) { addExp(2); blip([660, 880], 0.04); }
-    };
-    el.addEventListener("pointerup", release);
-    el.addEventListener("pointercancel", release);
-    return t;
-  }
-  TOYS.slice(0, 12).forEach((n) => addToy(n));
-
-  function stepToys() {
-    const grav = floatMode ? 0 : 0.55;
-    for (const t of toys) {
-      if (t.drag) continue;
-      t.vy += grav;
-      t.vx *= 0.995;
-      if (floatMode) t.vy *= 0.995;
-      t.x += t.vx; t.y += t.vy; t.rot += t.vr;
-      t.vr *= 0.97;
-      const floor = bh - 10 - t.h;
-      if (t.y > floor) {
-        t.y = floor;
-        if (Math.abs(t.vy) > 3) blip(120 + Math.random() * 60, 0.03, "triangle");
-        t.vy *= -0.45; t.vx *= 0.85; t.vr = t.vx * 1.5;
-        if (Math.abs(t.vy) < 1) t.vy = 0;
-      }
-      if (floatMode && t.y < 0) { t.y = 0; t.vy *= -0.8; }
-      if (t.x < 0) { t.x = 0; t.vx *= -0.6; }
-      if (t.x > bw - t.w) { t.x = bw - t.w; t.vx *= -0.6; }
-    }
-    for (let i = 0; i < toys.length; i++) {
-      for (let j = i + 1; j < toys.length; j++) {
-        const a = toys[i], b = toys[j];
-        const dx = b.x + b.w / 2 - (a.x + a.w / 2), dy = b.y + b.h / 2 - (a.y + a.h / 2);
-        const dist = Math.hypot(dx, dy) || 0.01;
-        const min = (a.r + b.r) * 0.8;
-        if (dist < min) {
-          const push = (min - dist) / 2, nx = dx / dist, ny = dy / dist;
-          if (!a.drag) { a.x -= nx * push; a.y -= ny * push; }
-          if (!b.drag) { b.x += nx * push; b.y += ny * push; }
-          const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
-          if (rel < 0) {
-            const imp = -rel * 0.6;
-            if (!a.drag) { a.vx -= nx * imp; a.vy -= ny * imp; }
-            if (!b.drag) { b.vx += nx * imp; b.vy += ny * imp; }
-          }
-        }
-      }
-    }
-    for (const t of toys) t.el.style.transform = `translate(${t.x}px, ${t.y}px) rotate(${t.rot}deg)`;
-  }
-  (function toyLoop() {
-    if (boxVisible) stepToys();
-    requestAnimationFrame(toyLoop);
-  })();
-  new IntersectionObserver(([e]) => { boxVisible = e.isIntersecting; }, { threshold: 0.05 }).observe(toyBox);
-
-  $("btnOpen").addEventListener("click", () => {
-    if (toys.length >= 40) { toast("The chest is full!"); return; }
-    const t = addToy(undefined, bw / 2 - 20, bh - 80);
-    t.vy = -rand(14, 18);
-    t.vx = rand(-6, 6);
-    toast(`Obtained ${TOY_NAMES[t.name]}!`);
-    blip([523, 659, 784, 1046], 0.06);
-    addExp(5);
-  });
-  $("btnShake").addEventListener("click", () => {
-    toys.forEach((t) => { t.vx += rand(-14, 14); t.vy -= rand(8, 18); t.vr += rand(-20, 20); });
-    toyBox.animate([{ transform: "translateX(0)" }, { transform: "translateX(-10px)" }, { transform: "translateX(10px)" }, { transform: "translateX(0)" }], { duration: 250, iterations: 2 });
-    blip([150, 110, 150], 0.05, "sawtooth");
-  });
-  const gBtn = $("btnGravity");
-  gBtn.addEventListener("click", () => {
-    floatMode = !floatMode;
-    gBtn.setAttribute("aria-pressed", String(floatMode));
-    if (floatMode) toys.forEach((t) => { t.vy -= rand(2, 6); t.vx += rand(-2, 2); t.vr += rand(-3, 3); });
-    blip(floatMode ? [300, 500, 800] : [800, 500, 300], 0.06, "sine");
-  });
-  $("btnClear").addEventListener("click", () => {
-    toys.splice(0).forEach((t) => t.el.remove());
-    blip([400, 300, 200, 100], 0.05);
-    setTimeout(() => { for (let i = 0; i < 6; i++) addToy(); }, 600);
-  });
 
   /* =========================================================
      SAVE POINT

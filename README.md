@@ -1,6 +1,6 @@
 # kennydev.in
 
-The personal site of Kenny Devin Wijaya, a product and sales specialist with a full-stack toolkit. It's built as a mecha JRPG and is plain HTML, CSS and JavaScript, with no build step.
+The personal site of Kenny Devin Wijaya, a product and sales specialist with a full-stack toolkit. It's styled like a modern tactics RPG (deep navy, gold hairlines, glass panels) and is plain HTML, CSS and JavaScript, with no build step.
 
 On a visitor's first visit, they pick one of two views:
 
@@ -15,7 +15,6 @@ Visitors can switch views any time from the top bar.
   - *Hunts*: real-time JRPG battles in a pop-up. Hit the monster's weakness to knock it down, get "1 MORE" turn, finish with an All-Out Attack, or have the pilot call in your mech
   - *Tactics ops*: grid strategy battles with your mech squad. They have movement ranges, forest and ruins cover, counterattacks, a combat forecast, and a class triangle (Titan beats Striker, Striker beats Support, Support beats Titan)
 - **Chapter III · Status**: a JRPG menu with a pixel portrait and work details (status, skills, journey and training)
-- **Chapter IV · Toy Chest**: toys you can drag and fling
 - **Save point**: EXP, level, gold and loot are saved in the browser
 - **Secret**: the Konami code
 

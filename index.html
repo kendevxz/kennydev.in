@@ -8,7 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%230a0f2c'/><path d='M8 1l4 6-4 8-4-8z' fill='%237df9ff'/><path d='M8 1l4 6H4z' fill='%23fff' opacity='.7'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=Cinzel:wght@700;900&family=Inter:wght@400;500;600;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -25,7 +25,6 @@
       <a href="#hangar">HANGAR</a>
       <a href="#quests">QUESTS</a>
       <a href="#status">STATUS</a>
-      <a href="#chest">TOYS</a>
     </nav>
     <div class="hud-right">
       <span class="gil"><b id="gil">0</b> G</span>
@@ -164,23 +163,6 @@
       </div>
       <div class="window status-panel" id="statusPanel" role="tabpanel" aria-live="polite"></div>
     </div>
-  </section>
-
-  <!-- ============ CHAPTER 4: TOY CHEST ============ -->
-  <section class="chapter chest" id="chest">
-    <header class="chapter-head">
-      <span class="chapter-num">CHAPTER IV</span>
-      <h2>Toy Chest</h2>
-      <p>Mini mechs, slimes, potions, dice. Grab them, throw them, stack them.</p>
-    </header>
-
-    <div class="chest-controls">
-      <button class="chip" id="btnOpen">✦ OPEN CHEST</button>
-      <button class="chip" id="btnShake">⤢ SHAKE</button>
-      <button class="chip" id="btnGravity" aria-pressed="false">⇅ FLOAT</button>
-      <button class="chip" id="btnClear">⌫ TIDY UP</button>
-    </div>
-    <div id="toybox" class="toybox"></div>
   </section>
 
   <!-- ============ SAVE POINT ============ -->
