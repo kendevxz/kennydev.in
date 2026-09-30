@@ -974,76 +974,188 @@
     return P;
   }
 
-  /* =========================================================
-     PORTRAIT — bust, facing left, GBA-tactics style
-     ========================================================= */
-  const PORTRAIT = { skin: "#e2a77b", hair: "#2c2842", cloth: "#2d4c9c", trim: "#e8b93a", iris: "#7a4b2a", m1: "#e05a2b", m2: "#f1f3f9", m3: "#e8b93a", eye: "#7df9ff" };
-  function portraitParts() {
-    const W = 64, H = 64, P = [];
-    const mk = (fn, o = {}) => P.push(part(fn, { w: W, h: H, ...o }));
-    // hair behind the head
-    mk((L) => {
-      poly(L, [[36, 14], [50, 18], [54, 30], [52, 42], [46, 44], [40, 24]], "hair", 3);
-      poly(L, [[46, 22], [58, 30], [50, 34]], "hair", 1.6);
-      poly(L, [[48, 32], [57, 42], [49, 42]], "hair", 1.6);
+  /* ---------- portrait: hand-authored, cel-shaded, GBA tactics style ---------- */
+  const PW = 72, PH = 72;
+  const PCOL = {
+    // skin
+    s0: "#5c2f24", s1: "#a8633f", s2: "#d7976a", s3: "#f4c59b", s4: "#ffe2c2",
+    // hair (deep navy-indigo)
+    h0: "#12122e", h1: "#26286a", h2: "#3a3f98", h3: "#5963c6", h4: "#8b98ee",
+    // eyes
+    e0: "#1a1530", ew: "#f6f4ff", ei: "#2c3a7a", eh: "#9fb4ff",
+    // armour + cape + gold
+    a0: "#0f1230", a1: "#1c2356", a2: "#2b3577", a3: "#4150a6",
+    c0: "#0f1d52", c1: "#1f3a9a", c2: "#3159d0", c3: "#6f93f2",
+    g0: "#5a3a0c", g1: "#a8761e", g2: "#e3b33c", g3: "#fff1a6",
+    w1: "#7c8499", w2: "#b9c0d2",
+  };
+
+  function pgrid() { return Array.from({ length: PH }, () => Array(PW).fill(null)); }
+  function pfill(g, pts, k) {
+    const ys = pts.map((p) => p[1]);
+    for (let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++) {
+      if (y < 0 || y >= PH) continue;
+      for (let x = 0; x < PW; x++) {
+        const px = x + 0.5, py = y + 0.5;
+        let inside = false;
+        for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+          const [xi, yi] = pts[i], [xj, yj] = pts[j];
+          if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+        }
+        if (inside) g[y][x] = k;
+      }
+    }
+  }
+  // recolour only pixels already of a given family (e.g. shade skin inside a region)
+  function pshade(g, pts, from, k) {
+    const tmp = pgrid();
+    pfill(tmp, pts, 1);
+    for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) if (tmp[y][x] && g[y][x] && from.includes(g[y][x])) g[y][x] = k;
+  }
+  function pline(g, x1, y1, x2, y2, k) {
+    const n = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)) || 1;
+    for (let i = 0; i <= n; i++) {
+      const x = Math.round(x1 + ((x2 - x1) * i) / n), y = Math.round(y1 + ((y2 - y1) * i) / n);
+      if (x >= 0 && y >= 0 && x < PW && y < PH) g[y][x] = k;
+    }
+  }
+  function pdots(g, list, k) { list.forEach(([x, y]) => { if (g[y]) g[y][x] = k; }); }
+  function poutline(g, k) {
+    const add = [];
+    for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
+      if (g[y][x]) continue;
+      if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => g[y + dy] && g[y + dy][x + dx])) add.push([x, y]);
+    }
+    add.forEach(([x, y]) => (g[y][x] = k));
+  }
+
+  function portraitLayers() {
+    const L = [];
+
+    // 1. hair mass behind the head (falls behind the ear to the nape)
+    let g = pgrid();
+    pfill(g, [[15, 24], [17, 12], [25, 5], [37, 2], [49, 4], [58, 11], [62, 21], [61, 31], [58, 38], [54, 41], [52, 36], [50, 28], [22, 26]], "h2");
+    pshade(g, [[48, 14], [62, 20], [62, 34], [58, 40], [53, 40], [50, 26]], ["h2"], "h1");
+    pline(g, 57, 29, 55, 38, "h0"); pline(g, 60, 25, 59, 33, "h1");
+    poutline(g, "h0");
+    L.push(g);
+
+    // 2. neck
+    g = pgrid();
+    pfill(g, [[30, 44], [45, 42], [47, 60], [29, 62]], "s3");
+    pshade(g, [[29, 44], [47, 42], [47, 53], [40, 55], [33, 52]], ["s3"], "s2");
+    pshade(g, [[40, 44], [47, 42], [47, 60], [42, 60]], ["s3", "s2"], "s1");
+    poutline(g, "s0");
+    L.push(g);
+
+    // 3. armour, cape and collar
+    g = pgrid();
+    pfill(g, [[4, 72], [8, 64], [22, 58], [52, 58], [66, 62], [72, 68], [72, 72]], "a2");
+    pshade(g, [[40, 58], [72, 62], [72, 72], [44, 72]], ["a2"], "a1");
+    pfill(g, [[48, 57], [63, 55], [72, 60], [72, 72], [58, 72], [54, 64]], "a3");
+    pshade(g, [[56, 64], [72, 64], [72, 72], [58, 72]], ["a3"], "a2");
+    pline(g, 49, 57, 63, 55, "g2"); pline(g, 63, 55, 72, 60, "g2"); pline(g, 50, 58, 62, 56, "g1");
+    pline(g, 54, 63, 58, 72, "g2");
+    // cape draped over the near shoulder
+    pfill(g, [[4, 72], [7, 63], [18, 57], [26, 60], [22, 72]], "c2");
+    pshade(g, [[4, 72], [7, 66], [14, 64], [12, 72]], ["c2"], "c1");
+    pline(g, 9, 63, 18, 58, "c3"); pline(g, 16, 66, 21, 61, "c1");
+    // high collar
+    pfill(g, [[24, 60], [29, 50], [33, 57], [32, 66], [26, 68]], "c2");
+    pfill(g, [[44, 50], [51, 54], [52, 66], [45, 66], [43, 58]], "c1");
+    pline(g, 29, 51, 26, 64, "c3");
+    pline(g, 24, 60, 29, 50, "g2"); pline(g, 51, 54, 52, 64, "g2");
+    // shirt + clasp
+    pfill(g, [[32, 57], [44, 57], [38, 66]], "w2");
+    pline(g, 38, 58, 38, 65, "w1");
+    pfill(g, [[34, 66], [38, 63], [42, 66], [38, 70]], "g2");
+    pdots(g, [[37, 65], [38, 64]], "g3"); pdots(g, [[38, 69], [39, 68]], "g1");
+    pline(g, 26, 68, 32, 66, "g2"); pline(g, 44, 66, 51, 66, "g2");
+    poutline(g, "a0");
+    L.push(g);
+
+    // 4. face + ear
+    g = pgrid();
+    pfill(g, [[23, 17], [47, 14], [51, 22], [51, 33], [48, 40], [41, 46], [35, 49], [30, 48], [26, 44], [23, 39], [21, 35], [22, 30], [21, 25]], "s3");
+    pfill(g, [[49, 27], [55, 26], [56, 32], [53, 38], [49, 37]], "s3");
+    // cel shadows: under the fringe, the far side of the face, the jaw, the ear
+    pshade(g, [[21, 17], [52, 14], [52, 22], [40, 23], [30, 25], [21, 26]], ["s3"], "s2");
+    pshade(g, [[43, 22], [52, 21], [52, 34], [48, 41], [41, 46], [44, 37], [45, 29]], ["s3"], "s2");
+    pshade(g, [[47, 24], [52, 22], [52, 34], [49, 40]], ["s2", "s3"], "s1");
+    pshade(g, [[49, 27], [56, 26], [56, 33], [53, 38], [49, 37]], ["s3"], "s2");
+    pdots(g, [[51, 29], [52, 30], [52, 31], [51, 32], [52, 33], [53, 34]], "s1");
+    // light on the cheekbone and the bridge of the nose
+    pshade(g, [[23, 31], [29, 31], [28, 37], [23, 37]], ["s3"], "s4");
+    pdots(g, [[30, 30], [30, 31], [30, 32]], "s4");
+    // nose: side shadow and nostril
+    pline(g, 31, 31, 32, 37, "s2"); pdots(g, [[30, 38], [31, 38]], "s1"); pdots(g, [[29, 37]], "s2");
+    // mouth
+    pline(g, 29, 42, 34, 42, "s1"); pdots(g, [[35, 41]], "s2"); pdots(g, [[30, 44], [31, 44], [32, 44]], "s2");
+    // brows
+    pline(g, 34, 26, 42, 25, "h1"); pline(g, 35, 27, 41, 26, "h0"); pdots(g, [[43, 26]], "h1");
+    pline(g, 22, 27, 28, 26, "h1"); pline(g, 23, 28, 27, 27, "h0");
+    // far eye (larger, right)
+    pline(g, 34, 29, 42, 29, "e0"); pdots(g, [[43, 30], [33, 30]], "e0");
+    pdots(g, [[34, 30], [34, 31]], "ew");
+    pdots(g, [[35, 30], [36, 30], [35, 31], [36, 31], [35, 32]], "e0");
+    pdots(g, [[37, 30], [37, 31], [36, 32], [37, 32]], "ei");
+    pdots(g, [[36, 31]], "eh");
+    pdots(g, [[38, 30], [38, 31], [39, 30], [39, 31], [40, 31]], "ew");
+    pline(g, 35, 33, 40, 33, "s2"); pdots(g, [[41, 32]], "s2");
+    // near eye (smaller, toward the profile)
+    pline(g, 23, 29, 28, 29, "e0"); pdots(g, [[22, 30], [29, 30]], "e0");
+    pdots(g, [[23, 30], [23, 31]], "ew");
+    pdots(g, [[24, 30], [25, 30], [24, 31], [25, 32]], "e0");
+    pdots(g, [[25, 31], [26, 31], [26, 32]], "ei");
+    pdots(g, [[25, 31]], "eh");
+    pdots(g, [[26, 30], [27, 30], [27, 31], [28, 31]], "ew");
+    pline(g, 24, 33, 27, 33, "s2");
+    poutline(g, "s0");
+    L.push(g);
+
+    // 5. front hair: crown, fringe clumps, shine band
+    g = pgrid();
+    pfill(g, [[14, 26], [15, 14], [22, 7], [35, 2], [48, 4], [57, 10], [60, 18], [58, 22], [52, 20], [48, 16], [24, 18], [18, 24]], "h2");
+    const clumps = [
+      [[13, 20], [22, 15], [25, 19], [21, 26], [18, 23], [15, 27]],
+      [[20, 15], [31, 12], [30, 19], [27, 26], [25, 21], [22, 24]],
+      [[27, 13], [39, 10], [37, 18], [33, 27], [31, 19]],
+      [[35, 11], [47, 11], [45, 17], [41, 24], [40, 17]],
+      [[43, 11], [54, 13], [53, 18], [49, 23], [48, 16]],
+      [[50, 13], [60, 16], [61, 24], [58, 30], [55, 21]],
+    ];
+    clumps.forEach((c) => pfill(g, c, "h2"));
+    // shadow side of each clump + gaps between them
+    pshade(g, [[48, 8], [62, 16], [62, 32], [55, 32], [50, 20]], ["h2"], "h1");
+    [[25, 19, 22, 25], [31, 18, 28, 25], [37, 18, 34, 26], [45, 16, 42, 23], [53, 17, 50, 22]].forEach(([x1, y1, x2, y2]) => { pline(g, x1, y1, x2, y2, "h1"); pline(g, x1 + 1, y1, x2 + 1, y2, "h0"); });
+    // lit strands
+    [[19, 17, 17, 24], [25, 15, 23, 22], [31, 14, 29, 22], [38, 12, 36, 19], [45, 12, 44, 17]].forEach(([x1, y1, x2, y2]) => pline(g, x1, y1, x2, y2, "h3"));
+    // shine band across the crown
+    pline(g, 19, 11, 24, 8, "h3"); pline(g, 25, 7, 31, 5, "h4"); pline(g, 32, 5, 38, 5, "h4"); pline(g, 39, 5, 44, 6, "h3");
+    pline(g, 21, 12, 27, 9, "h3"); pline(g, 28, 8, 36, 7, "h3");
+    pdots(g, [[33, 4], [34, 4]], "h4");
+    // stray strands
+    pline(g, 14, 18, 11, 22, "h2"); pline(g, 58, 12, 63, 14, "h2");
+    poutline(g, "h0");
+    L.push(g);
+
+    return L;
+  }
+
+  function renderPortrait(scale = 2) {
+    const c = document.createElement("canvas");
+    c.width = PW * scale; c.height = PH * scale;
+    const ctx = c.getContext("2d");
+    portraitLayers().forEach((g) => {
+      for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
+        const k = g[y][x];
+        if (!k) continue;
+        ctx.fillStyle = PCOL[k];
+        ctx.fillRect(x * scale, y * scale, scale, scale);
+      }
     });
-    // body: jacket, collar, pauldron
-    mk((L) => {
-      poly(L, [[2, 64], [6, 52], [18, 46], [44, 46], [58, 52], [63, 64]], "cloth", 3);
-      poly(L, [[22, 45], [40, 45], [42, 52], [31, 58], [20, 52]], "m1", 2);
-      poly(L, [[26, 47], [36, 47], [31, 55]], "m2", 1.4);
-      poly(L, [[3, 58], [8, 49], [20, 46], [22, 54], [12, 60]], "trim", 2.2);
-      poly(L, [[44, 47], [58, 52], [60, 58], [46, 55]], "trim", 1.8, [0.3, -0.1]);
-      line(L, 31, 55, 31, 64, "cloth", 1);
-    });
-    // neck + face + ear
-    mk((L) => {
-      poly(L, [[27, 36], [37, 36], [37, 47], [31, 50], [26, 46]], "skin", 2, [0.4, 0.1]);
-      poly(L, [[20, 20], [42, 17], [46, 28], [44, 37], [37, 44], [30, 45], [24, 40], [19, 30]], "skin", 3);
-      ellipse(L, 44, 30, 2.6, 4, "skin");
-      // brows
-      line(L, 21, 23, 27, 22, "hair", 1); line(L, 21, 24, 26, 23, "hair", 2);
-      line(L, 31, 22, 37, 23, "hair", 1); line(L, 32, 23, 37, 24, "hair", 2);
-      // eyes: heavy top lash, white, two-tone iris, highlight
-      const eye = (x0, narrow) => {
-        line(L, x0, 26, x0 + 5, 26, "ink", 0); dot(L, x0 - 1, 27, "ink", 0); dot(L, x0 + 6, 27, "ink", 0);
-        for (let y = 27; y <= 29; y++) for (let x = x0; x <= x0 + 5; x++) dot(L, x, y, "ink", 4);
-        const ix = narrow ? x0 + 1 : x0 + 2;
-        for (let y = 27; y <= 29; y++) for (let x = ix; x <= ix + 2; x++) dot(L, x, y, "iris", y === 27 ? 0 : y === 28 ? 1 : 4);
-        dot(L, ix, 27, "ink", 0); dot(L, ix + 1, 28, "ink", 5);
-        line(L, x0, 30, x0 + 5, 30, "skin", 2);
-      };
-      eye(21, false); eye(31, true);
-      // nose + mouth
-      dot(L, 27, 33, "skin", 2); dot(L, 27, 34, "skin", 2); dot(L, 28, 35, "skin", 1);
-      line(L, 27, 39, 31, 39, "skin", 1); dot(L, 32, 38, "skin", 1);
-      // shading: hair shadow on the forehead, far-side jaw, under the chin
-      const shadeSkin = (fn, tone) => { for (let y = 0; y < L.h; y++) for (let x = 0; x < L.w; x++) { const p = L.px[y][x]; if (p && p[0] === "skin" && fn(x, y)) p[1] = Math.min(p[1], tone); } };
-      shadeSkin((x, y) => y >= 19 && y <= 22, 2);
-      shadeSkin((x, y) => x >= 38 && y >= 31 && x - 38 > (40 - y) * 0.4, 2);
-      shadeSkin((x, y) => y >= 42, 1);
-      shadeSkin((x, y) => y >= 36 && y <= 47 && x >= 26 && x <= 37 && y > 43, 1);
-      // cheek blush
-      dot(L, 22, 34, "skin", 4); dot(L, 36, 34, "skin", 4);
-    });
-    // headset
-    mk((L) => {
-      ellipse(L, 45, 30, 3.2, 4.4, "m1");
-    });
-    // front hair: fringe + spikes
-    mk((L) => {
-      ellipse(L, 32, 16, 15, 10, "hair");
-      poly(L, [[15, 22], [22, 12], [27, 26]], "hair", 1.6);
-      poly(L, [[21, 15], [30, 11], [29, 26]], "hair", 1.6);
-      poly(L, [[27, 14], [37, 11], [34, 25]], "hair", 1.6);
-      poly(L, [[34, 13], [44, 14], [40, 24]], "hair", 1.6);
-      poly(L, [[18, 11], [22, 1], [29, 9]], "hair", 1.4);
-      poly(L, [[28, 8], [38, 0], [40, 9]], "hair", 1.4);
-      poly(L, [[38, 9], [50, 6], [46, 16]], "hair", 1.4);
-      poly(L, [[14, 16], [9, 12], [18, 12]], "hair", 1.2);
-      line(L, 23, 9, 31, 7, "hair", 5); line(L, 20, 13, 26, 11, "hair", 4);
-    });
-    return P;
+    c.className = "portrait";
+    return c;
   }
 
   function paintLayerCanvas(L, mats, scale) {
@@ -1073,13 +1185,7 @@
     return wrap;
   }
   function buildPortrait(scale = 2) {
-    const c = document.createElement("canvas");
-    c.width = 64 * scale; c.height = 64 * scale;
-    const ctx = c.getContext("2d");
-    const mats = materials(PORTRAIT);
-    portraitParts().forEach((L) => ctx.drawImage(paintLayerCanvas(L, mats, scale), 0, 0));
-    c.className = "portrait";
-    return c;
+    return renderPortrait(scale);
   }
 
   const saved = store.get("kd4-mech", {}) || {};

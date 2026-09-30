@@ -359,7 +359,7 @@ canvas { image-rendering: pixelated; }
 .status-tabs .menu-item[aria-selected="true"]::after { content: " <"; }
 .status-panel { min-height: 460px; padding: 26px 28px; }
 .st-top { display: flex; align-items: center; gap: 20px; }
-.st-portrait { width: 134px; height: 134px; overflow: hidden; background: linear-gradient(#3149c4, #0f1a6b) !important; flex: none; display: grid; place-items: center; background: rgba(0,0,0,.3); border: 3px solid #fff; border-radius: 8px; }
+.st-portrait { width: 150px; height: 150px; overflow: hidden; background: linear-gradient(#3149c4, #0f1a6b) !important; flex: none; display: grid; place-items: center; background: rgba(0,0,0,.3); border: 3px solid #fff; border-radius: 8px; }
 .st-top h3 { margin: 0 0 8px; font-family: var(--display); font-weight: 900; font-size: 28px; color: var(--gold); letter-spacing: 0; line-height: 1.15; }
 .st-job { margin: 0 0 6px; font-family: var(--pixel); font-size: 11px; color: #fff; line-height: 1.6; }
 .st-loc { margin: 0; font-family: var(--pixel); font-size: 9px; color: var(--cyan); line-height: 1.6; }
