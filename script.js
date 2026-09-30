@@ -1022,34 +1022,37 @@
     };
   }
 
-  // one sprite part: dark ink outline, lit from the upper left, shadow band on the right
+  // one sprite part: rounded shading lit from the upper left, edges drawn in the part's own darkest tone
   function spPart(G, polys, mat, o = {}) {
     const m = celMask(G, polys);
     const at = (x, y) => y >= 0 && y < G.h && x >= 0 && x < G.w && m[y][x];
     if (o.outline !== false)
       for (let y = 0; y < G.h; y++) for (let x = 0; x < G.w; x++)
-        if (!m[y][x] && (at(x + 1, y) || at(x - 1, y) || at(x, y + 1) || at(x, y - 1))) G.px[y][x] = [o.outlineMat || "ink", 0];
-    for (let y = 0; y < G.h; y++) {
-      let x = 0;
-      while (x < G.w) {
-        if (!m[y][x]) { x++; continue; }
-        let x1 = x;
-        while (x1 + 1 < G.w && m[y][x1 + 1]) x1++;
-        const w = x1 - x + 1;
-        for (let px = x; px <= x1; px++) {
-          let t = 3;
-          if (!o.flat) {
-            if (!at(px, y - 1) || (px === x && w > 2)) t = 4;
-            else if (w >= 3 && px >= x + Math.ceil(w * 0.6)) t = 2;
-            if (!at(px, y + 1) && w > 2 && px > x) t = Math.min(t, 2);
-            if (px === x1 && w >= 5 && at(px, y - 1)) t = 1;
-          }
-          G.px[y][px] = [mat, o.tone !== undefined ? o.tone : t];
-        }
-        x = x1 + 1;
+        if (!m[y][x] && (at(x + 1, y) || at(x - 1, y) || at(x, y + 1) || at(x, y - 1))) G.px[y][x] = [o.outlineMat || mat, 0];
+    // soften the mask, then light each pixel by the slope of the soft shape
+    const R = 2, soft = (x, y) => { let n = 0; for (let j = -R; j <= R; j++) for (let i = -R; i <= R; i++) n += at(x + i, y + j) ? 1 : 0; return n / ((2 * R + 1) * (2 * R + 1)); };
+    for (let y = 0; y < G.h; y++) for (let x = 0; x < G.w; x++) {
+      if (!m[y][x]) continue;
+      let t = 3;
+      if (!o.flat) {
+        const nx = soft(x - 1, y) - soft(x + 1, y), ny = soft(x, y - 1) - soft(x, y + 1);
+        const d = -nx * 0.55 - ny * 0.85;
+        t = d > 0.2 ? 4 : d < -0.34 ? 1 : d < -0.1 ? 2 : 3;
+        if (t === 4 && d > 0.42 && !at(x, y - 1)) t = 5;
       }
+      G.px[y][x] = [mat, o.tone !== undefined ? o.tone : t];
     }
     return m;
+  }
+  // final pass: only the outer silhouette gets the dark ink line
+  function inkOutline(G) {
+    const solid = (x, y) => y >= 0 && y < G.h && x >= 0 && x < G.w && G.px[y][x] && G.px[y][x][0] !== "sh";
+    const add = [];
+    for (let y = 0; y < G.h; y++) for (let x = 0; x < G.w; x++) {
+      if (solid(x, y)) { const p = G.px[y][x]; if (p[1] === 0 && p[0] !== "ink" && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([i, j]) => !solid(x + i, y + j))) add.push([x, y]); continue; }
+      if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([i, j]) => solid(x + i, y + j) && G.px[y + j][x + i][1] !== 0)) add.push([x, y]);
+    }
+    add.forEach(([x, y]) => (G.px[y][x] = ["ink", 0]));
   }
   // a tapered limb between two points, as a polygon
   function limb(x1, y1, x2, y2, w1, w2 = w1) {
@@ -1057,7 +1060,10 @@
     return [[x1 + (nx * w1) / 2, y1 + (ny * w1) / 2], [x2 + (nx * w2) / 2, y2 + (ny * w2) / 2], [x2 - (nx * w2) / 2, y2 - (ny * w2) / 2], [x1 - (nx * w1) / 2, y1 - (ny * w1) / 2]];
   }
   // arm or leg: two segments plus a round joint
-  const joint = (a, b, c, w1, w2, w3) => [limb(a[0], a[1], b[0], b[1], w1, w2), limb(b[0], b[1], c[0], c[1], w2, w3), oval(b[0], b[1], w2 / 2, w2 / 2, 12)];
+  const joint = (a, b, c, w1, w2, w3) => [limb(a[0], a[1], b[0], b[1], w1, w2), limb(b[0], b[1], c[0], c[1], w2, w3), oval(a[0], a[1], w1 / 2, w1 / 2, 12), oval(b[0], b[1], w2 / 2, w2 / 2, 12), oval(c[0], c[1], w3 / 2.2, w3 / 2.2, 12)];
+  // boot facing right: heel at x0, rounded toe past x1
+  const boot = (x0, x1) => [[x0 + 1, 53], [x1 - 2, 53], [x1, 55], [x1 + 2, 55.6], [x1 + 3.2, 57], [x1 + 2.6, 58.4], [x0 + 0.5, 58.4], [x0, 56]];
+  const fold = (G, mat, ...ls) => ls.forEach(([a, b, c, d]) => celLine(G, a, b, c, d, mat, 2));
 
   // head, three-quarter view facing right: hair mass behind, face lower right
   const HEAD = [
@@ -1086,13 +1092,17 @@
   }
   const shift = (pts, x, y) => pts.map(([a, b]) => [a + x, b + y]);
   function hairBack(G, h, hx, hy) {
-    if (h.hair === 2 && h.cls !== "assassin") spPart(G, [shift([[1, 5], [9, 5], [10, 20], [5, 27], [0, 26], [-2, 18]], hx, hy)], "h");
+    // long hair: tapered locks swept back behind the shoulders
+    if (h.hair === 2 && h.cls !== "assassin") {
+      spPart(G, [shift([[1, 5], [8, 6], [9, 13], [7, 19], [3, 24], [-2, 26], [-1, 21], [-2, 15], [-1, 9]], hx, hy)], "h");
+      celLine(G, hx + 3, hy + 14, hx + 1, hy + 22, "h", 2); celLine(G, hx + 6, hy + 14, hx + 4, hy + 20, "h", 2);
+    }
   }
   function drawHead(G, h, hx, hy) {
     if (h.hair === 1 && h.cls !== "assassin")
       spPart(G, [[[1, 6], [-4, 1], [3, 3]], [[1, 11], [-4, 10], [2, 8]], [[4, 3], [2, -3], [7, 1]], [[7, 1], [9, -4], [11, 1]], [[10, 2], [15, -2], [13, 4]], [[12, 5], [17, 5], [13, 8]]].map((p) => shift(p, hx, hy)), "h");
     pixGrid(G, HEAD, hx, hy, HEAD_KEY);
-    if (h.hair === 2 && h.cls !== "assassin") spPart(G, [shift([[2, 8], [6, 7], [6, 16], [3, 17], [1, 13]], hx, hy)], "h");
+    if (h.hair === 2 && h.cls !== "assassin") spPart(G, [shift([[2, 8], [5, 7], [5, 13], [3, 16], [2, 12]], hx, hy)], "h");
     if (h.cls === "healer") { celLine(G, hx + 2, hy + 5, hx + 13, hy + 6, "au", 4); celDot(G, hx + 11, hy + 6, "mg", 5); }
     if (h.cls === "knight") celLine(G, hx + 2, hy + 5, hx + 13, hy + 6, "c1", 3);
     if (h.cls === "assassin") {
@@ -1111,15 +1121,16 @@
       spPart(G, [limb(23, 35, 25, 38, 5)], "lt");
       spPart(G, [oval(26, 39.5, 2.5, 2.5)], S);
       spPart(G, joint([28, 42], [23, 49], [20, 55], 7, 6, 5), "c2");
-      spPart(G, [[[16, 53], [23, 53], [24, 58], [14, 58]]], "lt");
+      spPart(G, [boot(14, 21)], "lt");
       spPart(G, [[[25, 25], [40, 25], [41, 31], [38, 39], [27, 39], [25, 32]]], "lt");
       spPart(G, [[[31, 25], [36, 25], [34, 31], [33, 31]]], S, { outline: false });
       spPart(G, [[[26, 39], [39, 39], [41, 45], [25, 45]]], "c2");
+      fold(G, "c2", [29, 41, 30, 44], [36, 41, 35, 44]);
       spPart(G, [[[26, 36], [39, 36], [39, 40], [26, 40]]], "c1");
       celDot(G, 33, 38, "au", 4); celDot(G, 34, 38, "au", 3);
       spPart(G, [[[28, 39], [32, 39], [31, 47], [28, 46]]], "c1");
       spPart(G, joint([36, 42], [41, 48], [42, 55], 7, 6, 5), "c2");
-      spPart(G, [[[38, 53], [45, 53], [48, 58], [38, 58]]], "lt");
+      spPart(G, [boot(38, 44)], "lt");
       spPart(G, [[[31, 21], [36, 21], [36, 26], [31, 26]]], S);
       drawHead(G, h, hx, hy);
       spPart(G, [limb(40, 51, 55, 13, 2.4)], "wd");
@@ -1135,16 +1146,18 @@
       const hx = 24, hy = 8;
       hairBack(G, h, hx, hy);
       spPart(G, [[[27, 25], [36, 25], [31, 37], [23, 52], [11, 56], [9, 52], [17, 41]]], "c1");
+      fold(G, "c1", [27, 30, 17, 48], [30, 32, 20, 51]);
       spPart(G, [oval(26, 26, 5, 4)], "mt");
       spPart(G, joint([28, 41], [25, 48], [23, 55], 7, 7, 6), "mt");
-      spPart(G, [[[18, 53], [27, 53], [28, 58], [17, 58]]], "mt");
+      spPart(G, [boot(17, 24)], "mt");
       spPart(G, [[[24, 24], [41, 24], [42, 33], [39, 40], [26, 40], [24, 33]]], "mt");
       spPart(G, [[[25, 38], [40, 38], [42, 44], [23, 44]]], "mt");
+      celLine(G, 26, 26, 30, 26, "mt", 5); celDot(G, 27, 39, "mt", 5); celDot(G, 28, 39, "mt", 5);
       spPart(G, [[[25, 37], [40, 37], [40, 40], [25, 40]]], "c1");
       celDot(G, 34, 38, "au", 4); celDot(G, 35, 38, "au", 3);
       celLine(G, 28, 29, 37, 29, "c1", 3); celLine(G, 32, 30, 33, 35, "mt", 5);
       spPart(G, joint([36, 41], [40, 48], [41, 55], 7, 7, 6), "mt");
-      spPart(G, [[[37, 53], [46, 53], [48, 58], [37, 58]]], "mt");
+      spPart(G, [boot(37, 44)], "mt");
       spPart(G, [[[31, 20], [36, 20], [36, 25], [31, 25]]], S);
       drawHead(G, h, hx, hy);
       spPart(G, [[[15, 28], [27, 28], [27, 42], [21, 49], [15, 42]]], "c1", {});
@@ -1161,9 +1174,11 @@
       const hx = 24, hy = 10;
       hairBack(G, h, hx, hy);
       spPart(G, [[[27, 26], [37, 26], [31, 36], [23, 50], [13, 56], [9, 52], [18, 40]]], "c1");
+      fold(G, "c1", [28, 31, 18, 48], [31, 33, 20, 51]);
       spPart(G, joint([27, 28], [24, 34], [30, 36], 5, 5, 4), "c1");
       spPart(G, [[[26, 25], [40, 25], [41, 36], [45, 56], [38, 57], [31, 56], [22, 57], [24, 40]]], "c1");
       spPart(G, [[[22.5, 53], [44.5, 53], [45, 57], [22, 57]]], "c2");
+      fold(G, "c1", [28, 40, 26, 52], [40, 40, 42, 52], [32, 44, 31, 52]);
       celLine(G, 35, 28, 37, 53, "c2", 3);
       spPart(G, [[[25, 35], [41, 35], [41, 37], [25, 37]]], "c2");
       spPart(G, [[[26, 57], [31, 57], [31, 59], [25, 59]], [[37, 57], [42, 57], [44, 59], [37, 59]]], "lt");
@@ -1185,10 +1200,11 @@
       spPart(G, [[[20, 21], [25, 19], [30, 36], [25, 38]]], "lt");
       [[20, 18], [22, 17], [24, 16]].forEach(([x, y]) => { celLine(G, x, y + 3, x + 1, y, "c2", 4); celDot(G, x + 1, y - 1, "mt", 5); });
       spPart(G, joint([28, 42], [23, 49], [21, 55], 6, 6, 5), "c2");
-      spPart(G, [[[16, 53], [23, 53], [24, 58], [15, 58]]], "lt");
+      spPart(G, [boot(15, 21)], "lt");
       spPart(G, [[[26, 25], [39, 25], [40, 36], [42, 46], [25, 46], [26, 36]]], "c1");
+      fold(G, "c1", [29, 40, 28, 45], [37, 40, 38, 45]);
       spPart(G, joint([35, 42], [39, 49], [40, 55], 6, 6, 5), "c2");
-      spPart(G, [[[36, 53], [44, 53], [46, 58], [36, 58]]], "lt");
+      spPart(G, [boot(36, 42)], "lt");
       spPart(G, [[[25, 36], [41, 36], [41, 39], [25, 39]]], "lt");
       celLine(G, 28, 26, 38, 36, "lt", 2);
       spPart(G, [[[31, 21], [36, 21], [36, 26], [31, 26]]], S);
@@ -1209,9 +1225,11 @@
       const hx = 24, hy = 10;
       hairBack(G, h, hx, hy);
       spPart(G, [[[27, 25], [36, 25], [31, 36], [24, 52], [14, 56], [11, 51], [19, 40]]], "c2");
+      fold(G, "c2", [28, 30, 19, 48], [31, 32, 21, 51]);
       spPart(G, [[[26, 25], [39, 25], [40, 37], [44, 57], [23, 57], [25, 37]]], "c1");
       spPart(G, [[[31.5, 27], [35, 27], [36.5, 54], [30.5, 54]]], "c2", { outline: false });
       spPart(G, [[[23, 54], [44, 54], [44.5, 57], [22.5, 57]]], "c2", { outline: false });
+      fold(G, "c1", [27, 40, 25, 53], [40, 40, 42, 53]);
       spPart(G, [[[25, 36], [40, 36], [40, 38.5], [25, 38.5]]], "au");
       spPart(G, [[[31, 22], [36, 22], [36, 27], [31, 27]]], S);
       spPart(G, [[[25, 24], [41, 24], [42, 28], [33, 30], [24, 28]]], "c1");
@@ -1233,13 +1251,13 @@
       spPart(G, [oval(27.5, 40.5, 2.3, 2.3)], S);
       spPart(G, [limb(26.5, 42, 21, 48, 2, 1)], "mt");
       spPart(G, joint([29, 43], [20, 48], [14, 55], 6, 6, 5), "c1");
-      spPart(G, [[[9, 53], [16, 53], [16, 58], [8, 58]]], "lt");
+      spPart(G, [boot(8, 13)], "lt");
       spPart(G, [[[27, 28], [40, 28], [42, 35], [39, 43], [27, 43], [25, 35]]], "c1");
       spPart(G, [[[26, 39], [40, 39], [40, 42], [26, 42]]], "lt");
       celDot(G, 30, 40, "au", 4);
       spPart(G, joint([36, 43], [44, 47], [43, 55], 7, 6, 5), "c1");
       spPart(G, [limb(43, 50, 43, 54, 5.5)], "lt");
-      spPart(G, [[[39, 53], [47, 53], [50, 58], [39, 58]]], "lt");
+      spPart(G, [boot(39, 46)], "lt");
       spPart(G, [[[34, 25], [39, 25], [39, 29], [34, 29]]], S);
       drawHead(G, h, hx, hy);
       spPart(G, joint([39, 30], [45, 34], [49, 35], 5, 5, 4), "c1");
@@ -1253,6 +1271,7 @@
   function heroSprite(h, scale = 4) {
     const G = celCanvas(HERO_W, HERO_H);
     drawHero(G, h);
+    inkOutline(G);
     return celPaint(G, heroMats(h), scale);
   }
 
