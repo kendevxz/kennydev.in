@@ -24,7 +24,7 @@
     <nav class="hud-nav" aria-label="Sections">
       <a href="#hangar">HANGAR</a>
       <a href="#quests">QUESTS</a>
-      <a href="#arcana">ARCANA</a>
+      <a href="#files">FILES</a>
       <a href="#chest">TOYS</a>
     </nav>
     <div class="hud-right">
@@ -45,7 +45,7 @@
         <div class="window menu" id="titleMenu" role="menu" aria-label="Main menu">
           <button role="menuitem" data-go="#hangar" class="menu-item active">NEW GAME</button>
           <button role="menuitem" data-go="#quests" class="menu-item">CONTINUE</button>
-          <button role="menuitem" data-go="#arcana" class="menu-item">ARCANA</button>
+          <button role="menuitem" data-go="#files" class="menu-item">LOAD GAME</button>
           <button role="menuitem" data-go="config" class="menu-item">CONFIG <small id="cfgState">SOUND OFF</small></button>
           <span class="cursor" id="menuCursor" aria-hidden="true"></span>
         </div>
@@ -149,14 +149,17 @@
     </div>
   </section>
 
-  <!-- ============ CHAPTER 3: ARCANA ============ -->
-  <section class="chapter arcana" id="arcana">
+  <!-- ============ CHAPTER 3: LOAD GAME ============ -->
+  <section class="chapter files" id="files">
     <header class="chapter-head">
       <span class="chapter-num">CHAPTER III</span>
-      <h2 class="arcana-title"><span>A</span><span>R</span><span>C</span><span>A</span><span>N</span><span>A</span></h2>
-      <p>The cards that make up my save file. Tap one to turn it over.</p>
+      <h2>Load Game</h2>
+      <p>The worlds I keep coming back to. Pick a save file.</p>
     </header>
-    <div class="arcana-cards" id="arcanaCards"></div>
+    <div class="files-grid">
+      <div class="window file-list" id="fileList" role="listbox" aria-label="Save files"></div>
+      <div class="window file-detail" id="fileDetail" aria-live="polite"></div>
+    </div>
   </section>
 
   <!-- ============ CHAPTER 4: TOY CHEST ============ -->
@@ -197,22 +200,28 @@
     </div>
   </footer>
 
-  <!-- ============ BATTLE OVERLAY ============ -->
+  <!-- ============ BATTLE POP-UP ============ -->
   <div class="battle" id="battle" hidden>
-    <div class="battle-swirl" aria-hidden="true"></div>
-    <div class="arena" id="arena">
-      <div class="ability" id="ability" aria-live="polite"></div>
-      <div class="foe" id="foe"></div>
-      <div class="party" id="partySprites"></div>
-      <div class="summon" id="summon" aria-hidden="true"></div>
+    <div class="battle-box" role="dialog" aria-modal="true" aria-labelledby="battleTitle">
+      <div class="battle-bar">
+        <span id="battleTitle">QUEST</span>
+        <button class="battle-close" id="battleClose" aria-label="Leave the quest">✕</button>
+      </div>
+      <div class="battle-swirl" aria-hidden="true"></div>
+      <div class="arena" id="arena">
+        <div class="ability" id="ability" aria-live="polite"></div>
+        <div class="foe" id="foe"></div>
+        <div class="party" id="partySprites"></div>
+        <div class="summon" id="summon" aria-hidden="true"></div>
+      </div>
+      <div class="battle-ui">
+        <div class="window foe-list" id="foeList"></div>
+        <div class="window party-list" id="partyList"></div>
+        <div class="window commands" id="commands" hidden></div>
+      </div>
+      <div class="aoa" id="aoa" aria-hidden="true"><span>ALL-OUT</span><span>ATTACK!</span></div>
+      <div class="result" id="result" hidden></div>
     </div>
-    <div class="battle-ui">
-      <div class="window foe-list" id="foeList"></div>
-      <div class="window party-list" id="partyList"></div>
-      <div class="window commands" id="commands" hidden></div>
-    </div>
-    <div class="aoa" id="aoa" aria-hidden="true"><span>ALL-OUT</span><span>ATTACK!</span></div>
-    <div class="result" id="result" hidden></div>
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

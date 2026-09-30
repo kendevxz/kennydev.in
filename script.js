@@ -556,115 +556,296 @@
     pack: PACKS[saved.pack] ? saved.pack : 0,
   };
 
-  const poly = (c, pts) => `<polygon class="${c}" points="${pts}"/>`;
-  const mir = (pts) => pts.split(" ").map((p) => { const [x, y] = p.split(","); return `${200 - +x},${y}`; }).join(" ");
-  const g = (s) => `<g class="part">${s}</g>`;
-  const sides = (list) =>
-    g(list.map(([c, p]) => poly(c, p)).join("")) + g(list.map(([c, p]) => poly(c, mir(p))).join(""));
-  const paintStyle = (p) => `--m1:${p.m1};--m2:${p.m2};--m3:${p.m3};--m4:${p.m4};--eye:${p.eye};--beam:${p.beam}`;
-
   function unitName(c = cfg) {
     const h = HEADS[c.head];
     const num = String(c.head * 6 + c.weapon * 2 + c.pack + 1).padStart(2, "0");
     return `${h.code}-${num} ${h.name}`;
   }
 
-  function mechSVG(c = cfg) {
-    const P = PAINTS[c.paint];
-    let s = "";
+  /* ---------- pixel mech: half-grids mirrored, plus parts drawn in code ---------- */
+  const PM_W = 48, PM_H = 60;
+  const PJ_W = 54, PJ_H = 28;
 
-    // backpack (behind everything)
-    if (c.pack === 0) {
-      s += sides([["c2", "72,72 24,36 32,112 66,102"], ["c4", "24,36 32,112 26,114 18,42"], ["cf2", "66,102 32,112 40,118 64,110"]]);
-    } else {
-      s += sides([["cf", "60,58 78,58 78,112 60,112"], ["c2", "58,54 80,54 78,64 60,64"], ["c3", "62,112 76,112 74,120 64,120"]]);
-    }
-
-    // legs
-    s += sides([
-      ["cf", "78,150 98,150 96,192 80,192"],
-      ["c1", "72,188 98,188 101,240 68,240"],
-      ["c3", "70,214 99,212 99.5,220 69.5,222"],
-      ["c2", "76,182 95,182 93,198 78,198"],
-      ["c2", "60,238 103,238 105,252 57,252"],
-    ]);
-
-    // waist + torso
-    s += g(poly("c1", "80,136 120,136 124,154 76,154") + poly("c3", "93,138 107,138 108,160 92,160") + poly("c4", "96,141 104,141 104,148 96,148"));
-    s += g(
-      poly("c2", "68,84 132,84 124,138 76,138") +
-      poly("c1", "82,76 118,76 124,90 76,90") +
-      poly("c4", "79,96 94,96 94,112 81,112") +
-      poly("c4", "121,96 106,96 106,112 119,112") +
-      `<polyline class="line" points="82,101 93,101"/><polyline class="line" points="82,106 93,106"/>` +
-      `<polyline class="line" points="107,101 118,101"/><polyline class="line" points="107,106 118,106"/>` +
-      poly("c1", "91,114 109,114 106,132 94,132") +
-      `<circle class="ce" cx="100" cy="103" r="5"/>`
-    );
-
-    // shoulder cannon sits behind the arms
-    if (c.weapon === 2) {
-      s += g(`<g transform="rotate(-25 64 70)"><rect class="c2" x="56" y="10" width="16" height="66" rx="3"/><rect class="cf" x="58" y="0" width="12" height="14"/><rect class="c4" x="56" y="44" width="16" height="6"/></g>`);
-    }
-
-    // head
-    const eye = c.head === 2 ? "88,59 97,61 96,64 89,63" : "87,58 98,60 97,65 88,64";
-    s += g(
-      poly("cf", "94,68 106,68 106,80 94,80") +
-      poly("c1", "86,48 114,48 118,68 112,78 88,78 82,68") +
-      poly("c3", "96,73 104,73 102,79 98,79") +
-      (c.head === 1
-        ? `<rect class="cf" x="85" y="56" width="30" height="9" rx="3"/><circle class="ce" cx="100" cy="60.5" r="3.5"><animate attributeName="cx" values="89;111;89" dur="3.2s" repeatCount="indefinite"/></circle>`
-        : poly("ce", eye) + poly("ce", mir(eye)))
-    );
-    if (c.head === 0) {
-      s += g(poly("c4", "100,50 68,22 75,20 100,44") + poly("c4", mir("100,50 68,22 75,20 100,44")) + poly("c3", "95,48 105,48 100,38"));
-    } else if (c.head === 1) {
-      s += g(poly("c3", "98,48 102,48 103,26 97,26") + poly("cf", "114,52 128,28 131,30 118,54"));
-    } else {
-      s += g(poly("c4", "93,48 107,48 100,6") + poly("c4", "86,54 70,36 88,50") + poly("c4", mir("86,54 70,36 88,50")));
-    }
-
-    // arms
-    s += sides([
-      ["c1", "48,76 76,72 80,100 50,106"],
-      ["c3", "50,92 79,89 80,96 50,100"],
-      ["cf", "56,104 72,104 70,126 58,126"],
-      ["c1", "51,124 77,124 75,158 53,158"],
-      ["c2", "51,136 77,136 76,142 52,142"],
-      ["cf", "54,156 74,156 72,170 56,170"],
-    ]);
-
-    // hand weapon
-    if (c.weapon === 0) {
-      s += g(`<g transform="rotate(30 136 164)"><rect class="blade" x="133" y="68" width="6" height="88" rx="3"/><rect class="cf" x="131.5" y="154" width="9" height="22" rx="2"/><rect class="c4" x="130" y="152" width="12" height="5"/></g>`);
-    } else if (c.weapon === 1) {
-      s += g(`<g transform="rotate(8 136 164)"><rect class="cf" x="118" y="156" width="64" height="12" rx="2"/><rect class="cf2" x="180" y="159" width="18" height="6"/><rect class="c2" x="132" y="150" width="22" height="7" rx="2"/><rect class="cf" x="128" y="166" width="8" height="14"/><rect class="ce" x="150" y="152" width="4" height="3"/></g>`);
-    }
-
-    // thrusters
-    s += poly("flame", "64,252 98,252 81,284") + poly("flame", mir("64,252 98,252 81,284"));
-    if (c.pack === 1) s += poly("flame", "62,120 76,120 69,152") + poly("flame", mir("62,120 76,120 69,152"));
-
-    return `<svg class="mech" viewBox="-12 -12 224 300" style="${paintStyle(P)}" aria-hidden="true"><g class="mech-body">${s}</g></svg>`;
+  function shade(hex, amt) {
+    const n = parseInt(hex.slice(1), 16);
+    let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+    const f = (c) => Math.round(amt < 0 ? c * (1 + amt) : c + (255 - c) * amt);
+    return "#" + [f(r), f(g), f(b)].map((c) => c.toString(16).padStart(2, "0")).join("");
+  }
+  function mechColors(P) {
+    return {
+      k: "#0b0d1c",
+      "1": P.m1, "!": shade(P.m1, -0.3), w: shade(P.m1, 0.65),
+      "2": P.m2, "@": shade(P.m2, -0.32),
+      "3": P.m3, "#": shade(P.m3, -0.32),
+      "4": P.m4, "$": shade(P.m4, -0.3),
+      f: "#353a55", F: "#5b6388",
+      e: P.eye, E: shade(P.eye, 0.75),
+      b: P.beam, B: shade(P.beam, 0.8),
+      y: "#fff3a0", o: "#ffb020", r: "#ff5a1f",
+    };
   }
 
-  function jetSVG(c = cfg) {
-    const P = PAINTS[c.paint];
-    const s =
-      g(poly("c2", "34,64 52,62 42,32 26,32")) +
-      g(poly("c2", "34,78 52,78 42,108 26,108")) +
-      g(poly("cf", "22,60 38,60 38,82 22,82")) +
-      g(poly("c2", "80,66 136,64 112,26 74,26")) +
-      g(poly("c1", "34,62 150,54 198,70 150,86 34,80")) +
-      g(poly("c3", "56,68 150,62 150,67 56,73")) +
-      g(poly("c2", "80,76 140,76 112,116 72,116")) +
-      g(poly("ce", "130,58 160,58 172,67 136,67")) +
-      g(poly("c4", "176,64 198,70 176,76")) +
-      g(poly("c4", "74,26 80,26 78,34 72,34") + poly("c4", "72,116 78,116 80,108 74,108")) +
-      poly("flame", "22,63 22,79 -6,71");
-    return `<svg class="jet" viewBox="-10 20 214 100" style="${paintStyle(P)}" aria-hidden="true">${s}</svg>`;
+  const grid = (w, h) => Array.from({ length: h }, () => Array(w).fill("."));
+  function half(y0, rows) {
+    const gd = grid(PM_W, PM_H);
+    rows.forEach((row, i) => {
+      const r = row.padEnd(24, ".").slice(0, 24);
+      for (let x = 0; x < 24; x++) {
+        const ch = r[x];
+        if (ch === ".") continue;
+        if (gd[y0 + i]) { gd[y0 + i][x] = ch; gd[y0 + i][PM_W - 1 - x] = ch; }
+      }
+    });
+    return gd;
   }
+  const tail = (rows) => rows.map((r) => "............" + r);
+  function rect(gd, x, y, w, h, ch) {
+    for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (gd[j] && i >= 0 && i < gd[0].length) gd[j][i] = ch;
+  }
+  function outline(gd, skip = "bByor") {
+    const h = gd.length, w = gd[0].length;
+    const add = [];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (gd[y][x] !== ".") continue;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const c = gd[y + dy] && gd[y + dy][x + dx];
+        if (c && c !== "." && c !== "k" && !skip.includes(c)) { add.push([x, y]); break; }
+      }
+    }
+    add.forEach(([x, y]) => (gd[y][x] = "k"));
+    return gd;
+  }
+  function poly(gd, pts, ch) {
+    const h = gd.length, w = gd[0].length;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const px = x + 0.5, py = y + 0.5;
+      let inside = false;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const [xi, yi] = pts[i], [xj, yj] = pts[j];
+        if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+      }
+      if (inside) gd[y][x] = ch;
+    }
+  }
+
+  /* ---------- part art ---------- */
+  const WINGS = [
+    "k", "kk", "k2k", "k22k", "k222k", "k4222k", "k42222k", "k422222k", "k4222222k",
+    "k42222222k", "k4@222222@k", "k4@@22222@@k", "k4@@@2222@@@k", ".k4@@@222@@@@k", "..k4@@@@@@@@kk", "...k4@@@@kkk", "....kkkk",
+  ];
+  const BOOSTERS = [
+    "..........kkkk", ".........k2222k", ".........k2w22k", ".........k2w22k", ".........k2222k",
+    ".........k4444k", ".........k22@@k", ".........k2@@@k", ".........k2@@@k", ".........kffffk", ".........kkkkkk",
+  ];
+  const LEGS = [
+    "..............kfFFfk",
+    "..............kfFFfk",
+    "..............kfFFfk",
+    ".............kk2222kk",
+    ".............k2ww22@k",
+    ".............k22222@k",
+    ".............k2222@@k",
+    ".............kk1111kk",
+    ".............k1w111!k",
+    "............k11w111!!k",
+    "............k11w111!!k",
+    "............k3333333#k",
+    "............k11w111!!k",
+    "............k111111!!k",
+    "............k11111!!!k",
+    "............k1111!!!!k",
+    "............kkkkkkkkkk",
+    "...........k22222222@k",
+    "..........k222222222@@k",
+    "..........k@@@@@@@@@@@k",
+    "..........kkkkkkkkkkkkk",
+  ];
+  const WAIST = [
+    ".................kkkkkkk",
+    "................k1w11133",
+    "................k11111#3",
+    "................k!!!!k#3",
+    "................kkkkkk#3",
+    "......................k#",
+    "......................kk",
+  ];
+  const TORSO = [
+    "...............kkkkkkkkk",
+    "..............k111111111",
+    ".............k1w11111kkk",
+    ".............k2w222222ke",
+    ".............k2444442kEe",
+    ".............k2$$$$$2kee",
+    ".............k2444442kkk",
+    ".............k2$$$$$2222",
+    ".............k@222222222",
+    "..............k@22222222",
+    "..............k@@2222222",
+    "...............k11111111",
+    "...............k!!111111",
+    "...............kkkkkkkkk",
+  ];
+  const ARM = [
+    "......kkkkkkkk",
+    ".....k1111111k",
+    "....k11w111111k",
+    "....k1w1111111k",
+    "....k33333333#k",
+    "....k11111111!k",
+    "....k!!!!!!!!!k",
+    ".....kkkkkkkkk",
+    ".......kfFfk",
+    ".......kfFfk",
+    ".......kfFfk",
+    "......kk222kk",
+    ".....k1111111k",
+    ".....k1w11111k",
+    ".....k1w1111!k",
+    ".....k2222222k",
+    ".....k1111111k",
+    ".....k1111!!!k",
+    ".....kkkkkkkkk",
+    "......kfffffk",
+    "......kfFfFfk",
+    "......kfffffk",
+    ".......kkkkk",
+  ];
+  const HEADS_PX = [
+    // VANGUARD — V-fin, twin eyes
+    tail([
+      ".$4", "..$4", "...$4......k", "....$4....k3", ".....$4..k33", "......$4kk33",
+      "......kk1111", ".....k11w111", ".....k1kkkkk", ".....k1keeEk", ".....k1kkkkk",
+      ".....k!1ff1f", "......k!1k33", ".......kkkkk",
+    ]),
+    // SENTINEL — dome, mono-eye
+    tail([
+      "", "", "", "..........k3", ".........k33", ".......kkk33",
+      "......k11111", ".....k11w111", ".....k1kkkkk", ".....k1kffEe", ".....k1kkkkk",
+      ".....k!1111f", "......k!!1ff", ".......kkkkk",
+    ]),
+    // TITAN — great horn, heavy jaw
+    tail([
+      "...........4", "..........$4", "..4.......$4", "..$4.....k$4", "...$4....k$4", "....$4kkk$44",
+      ".....k111111", ".....k11w111", ".....k1kkkkk", ".....k1keeEk", ".....k1kkkkk",
+      ".....kffffff", "......kfFFff", ".......kkkkk",
+    ]),
+  ];
+
+  function weaponLayer(kind) {
+    const gd = grid(PM_W, PM_H);
+    if (kind === 0) {
+      // beam saber: hilt in the right hand, blade angled up and out
+      for (let i = 0; i < 26; i++) {
+        const y = 31 - i, x = 40 + Math.floor(i / 4);
+        gd[y][x] = "B";
+        if (gd[y][x - 1] !== undefined) gd[y][x - 1] = "b";
+        if (x + 1 < PM_W) gd[y][x + 1] = "b";
+      }
+      rect(gd, 38, 32, 3, 7, "f");
+      rect(gd, 39, 33, 1, 5, "F");
+      rect(gd, 37, 32, 5, 1, "4");
+      outline(gd);
+    } else if (kind === 1) {
+      // rifle held forward
+      rect(gd, 31, 32, 17, 3, "f");
+      rect(gd, 31, 32, 17, 1, "F");
+      rect(gd, 35, 29, 6, 2, "2");
+      rect(gd, 36, 29, 2, 1, "e");
+      rect(gd, 36, 35, 2, 3, "f");
+      rect(gd, 46, 32, 2, 3, "4");
+      outline(gd);
+    }
+    return gd;
+  }
+  function cannonLayer() {
+    const gd = grid(PM_W, PM_H);
+    rect(gd, 36, 1, 5, 15, "2");
+    rect(gd, 40, 1, 1, 15, "@");
+    rect(gd, 37, 2, 1, 12, "w");
+    rect(gd, 36, 5, 5, 1, "4");
+    rect(gd, 36, 11, 5, 1, "4");
+    rect(gd, 35, 0, 7, 2, "f");
+    rect(gd, 35, 14, 7, 3, "f");
+    outline(gd);
+    return gd;
+  }
+  function flameLayer() {
+    const gd = grid(PM_W, PM_H);
+    for (const cx of [16, 31]) {
+      rect(gd, cx - 4, 54, 9, 1, "y");
+      rect(gd, cx - 3, 55, 7, 1, "o");
+      rect(gd, cx - 2, 55, 5, 1, "y");
+      rect(gd, cx - 3, 56, 7, 1, "o");
+      rect(gd, cx - 2, 57, 5, 1, "r");
+      rect(gd, cx - 1, 57, 3, 1, "o");
+      rect(gd, cx - 1, 58, 3, 1, "r");
+      rect(gd, cx, 59, 1, 1, "r");
+    }
+    return gd;
+  }
+
+  function mechLayers(c) {
+    const L = [];
+    L.push(c.pack === 0 ? half(2, WINGS) : half(3, BOOSTERS));
+    if (c.weapon === 2) L.push(cannonLayer());
+    L.push(half(33, LEGS));
+    L.push(half(29, WAIST));
+    L.push(half(15, TORSO));
+    L.push(half(2, HEADS_PX[c.head]));
+    L.push(half(14, ARM));
+    if (c.weapon !== 2) L.push(weaponLayer(c.weapon));
+    const fl = flameLayer();
+    fl.flame = true;
+    L.push(fl);
+    return L;
+  }
+
+  function jetLayers() {
+    const mk = () => grid(PJ_W, PJ_H);
+    const tailFin = mk(); poly(tailFin, [[8, 12], [15, 12], [11, 2], [5, 2]], "2"); poly(tailFin, [[8, 12], [11, 12], [7, 4], [5, 4]], "@"); outline(tailFin);
+    const engine = mk(); rect(engine, 4, 11, 6, 6, "f"); rect(engine, 4, 12, 6, 1, "F"); outline(engine);
+    const body = mk();
+    poly(body, [[8, 11], [38, 9], [53, 14], [38, 18], [8, 17]], "1");
+    for (let y = 15; y < PJ_H; y++) for (let x = 0; x < PJ_W; x++) if (body[y][x] === "1") body[y][x] = "!";
+    rect(body, 12, 13, 26, 1, "3");
+    rect(body, 12, 11, 18, 1, "w");
+    outline(body);
+    const canopy = mk(); poly(canopy, [[32, 10], [40, 9], [45, 12], [33, 12]], "e"); rect(canopy, 36, 10, 3, 1, "E"); outline(canopy);
+    const wing = mk(); poly(wing, [[18, 16], [34, 16], [27, 27], [13, 27]], "2"); poly(wing, [[16, 22], [30, 22], [27, 27], [13, 27]], "@"); rect(wing, 13, 26, 4, 1, "4"); outline(wing);
+    const nose = mk(); poly(nose, [[44, 12], [54, 14], [44, 16]], "4"); outline(nose);
+    const fl = mk(); rect(fl, 0, 12, 4, 4, "o"); rect(fl, 1, 13, 3, 2, "y"); rect(fl, 0, 13, 1, 2, "r"); fl.flame = true;
+    return [tailFin, engine, wing, body, canopy, nose, fl];
+  }
+
+  function paintLayer(gd, colors, scale) {
+    const w = gd[0].length, h = gd.length;
+    const c = document.createElement("canvas");
+    c.width = w * scale; c.height = h * scale;
+    const ctx = c.getContext("2d");
+    let minX = w, minY = h, maxX = 0, maxY = 0;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const ch = gd[y][x];
+      if (ch === "." || !colors[ch]) continue;
+      ctx.fillStyle = colors[ch];
+      ctx.fillRect(x * scale, y * scale, scale, scale);
+      minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    }
+    c.className = "part" + (gd.flame ? " flame" : "");
+    c.style.transformOrigin = `${(((minX + maxX + 1) / 2) / w) * 100}% ${(((minY + maxY + 1) / 2) / h) * 100}%`;
+    return c;
+  }
+
+  function buildPixelUnit(kind, c, P, scale = 6) {
+    const wrap = document.createElement("div");
+    wrap.className = kind === "jet" ? "pjet" : "pmech";
+    const colors = mechColors(P);
+    (kind === "jet" ? jetLayers() : mechLayers(c)).forEach((gd) => wrap.appendChild(paintLayer(gd, colors, scale)));
+    return wrap;
+  }
+
+  const mechEl = (c = cfg) => buildPixelUnit("mech", c, PAINTS[c.paint]);
+  const jetEl = (c = cfg) => buildPixelUnit("jet", c, PAINTS[c.paint]);
 
   /* =========================================================
      CHAPTER I — HANGAR
@@ -716,13 +897,13 @@
   }
 
   function renderUnit(animate) {
-    bayUnit.innerHTML = mechSVG() + jetSVG();
-    heroMech.innerHTML = mechSVG();
+    bayUnit.replaceChildren(mechEl(), jetEl());
+    heroMech.replaceChildren(mechEl());
     $("unitName").textContent = unitName();
     $("unitMode").textContent = jetMode ? "FIGHTER" : "MOBILE SUIT";
     renderStats();
     store.set("kd2-mech", cfg);
-    if (animate) assemble(bayUnit.querySelector(jetMode ? ".jet" : ".mech"));
+    if (animate) assemble(bayUnit.querySelector(jetMode ? ".pjet" : ".pmech"));
   }
 
   const scatterPose = () =>
@@ -754,7 +935,7 @@
   $("btnTransform").addEventListener("click", async () => {
     if (hangarBusy) return;
     hangarBusy = true;
-    const from = bayUnit.querySelector(jetMode ? ".jet" : ".mech");
+    const from = bayUnit.querySelector(jetMode ? ".pjet" : ".pmech");
     scatterOut(from);
     blip([220, 330, 220, 440, 330, 660], 0.06, "sawtooth");
     await wait(650);
@@ -762,7 +943,7 @@
     bay.classList.toggle("jet-mode", jetMode);
     $("unitMode").textContent = jetMode ? "FIGHTER" : "MOBILE SUIT";
     from.querySelectorAll(".part").forEach((p) => { p.style.transition = "none"; p.style.transform = ""; p.style.opacity = ""; });
-    assemble(bayUnit.querySelector(jetMode ? ".jet" : ".mech"));
+    assemble(bayUnit.querySelector(jetMode ? ".pjet" : ".pmech"));
     await wait(900);
     hangarBusy = false;
     once("transform", () => { addExp(60); toast("ACHIEVEMENT: MORE THAN MEETS THE EYE"); });
@@ -885,14 +1066,14 @@
     const small = window.innerWidth < 720;
     foeEl.className = "foe";
     foeEl.innerHTML = "";
-    foeEl.appendChild(spriteCanvas(q.sprite, small ? Math.round(q.scale * 0.6) : q.scale));
+    foeEl.appendChild(spriteCanvas(q.sprite, small ? Math.round(q.scale * 0.55) : Math.round(q.scale * 0.85)));
 
     const ps = $("partySprites");
     ps.innerHTML = "";
     B.party.forEach((m) => {
       const d = document.createElement("div");
       d.className = "member";
-      d.appendChild(spriteCanvas(m.sprite, small ? 4 : 6));
+      d.appendChild(spriteCanvas(m.sprite, small ? 4 : 5));
       ps.appendChild(d);
       m.el = d;
     });
@@ -917,6 +1098,7 @@
     cmdEl.hidden = true;
     renderFoe();
     renderParty();
+    $("battleTitle").textContent = `${"★".repeat(q.rank)} QUEST · ${q.title.toUpperCase()}`;
     showAbility(`A wild ${q.foe} appears!`, 1400);
     setTimeout(() => { if (B === battle) B.timer = setInterval(tick, 50); }, 1000);
   }
@@ -930,6 +1112,17 @@
     renderQuests();
     renderPouch();
   }
+
+  function leaveBattle() {
+    if (!B) return;
+    const ok = $("resOk");
+    if (ok && !$("result").hidden) { ok.click(); return; }
+    const won = B.over;
+    endBattle();
+    if (!won) toast("You left the hunt.");
+  }
+  $("battleClose").addEventListener("click", leaveBattle);
+  battleEl.addEventListener("click", (e) => { if (e.target === battleEl && B) { leaveBattle(); } });
 
   function renderFoe() {
     const f = B.foe, q = B.q;
@@ -1119,7 +1312,10 @@
       B.mechUsed = true;
       showAbility(`MECH CALL · ${unitName()}`, 1600);
       const sm = $("summon");
-      sm.innerHTML = `<div class="mech-wrap">${mechSVG()}</div>`;
+      const wrap = document.createElement("div");
+      wrap.className = "mech-wrap";
+      wrap.appendChild(mechEl());
+      sm.replaceChildren(wrap);
       sm.classList.remove("go");
       void sm.offsetWidth;
       sm.classList.add("go");
@@ -1252,39 +1448,66 @@
   }
 
   /* =========================================================
-     CHAPTER III — ARCANA
+     CHAPTER III — LOAD GAME
      ========================================================= */
-  const ARCANA = [
-    { num: "I", name: "MECHA", color: "#3a86ff", sprite: "minimech", tag: "GUNDAM · TRANSFORMERS · ALL MECHS",
+  const FILES = [
+    { name: "MECHA", sub: "Gundam · Transformers · every giant robot", sprite: "minimech", lv: "LV 99", time: "999:59",
+      loc: "Hangar Bay 03", tags: ["Transforming", "Launch sequences", "Beam sabers"],
       line: "Giant robots, transforming or not. Bonus points for a dramatic launch sequence." },
-    { num: "II", name: "FINAL FANTASY", color: "#7df9ff", sprite: "crystal", tag: "CRYSTALS · SUMMONS · ATB",
+    { name: "FINAL FANTASY", sub: "Crystals, summons, airships", sprite: "crystal", lv: "LV 99", time: "812:40",
+      loc: "The Crystal Tower", tags: ["Summons", "ATB", "Airships"],
       line: "Summons, crystals, and a save file with way too many hours on it." },
-    { num: "III", name: "MONSTER HUNTER", color: "#f4a261", sprite: "meat", tag: "HUNT · CARVE · CRAFT",
+    { name: "MONSTER HUNTER", sub: "Hunt, carve, craft, repeat", sprite: "meat", lv: "HR 999", time: "1204:33",
+      loc: "Base Camp", tags: ["Great swords", "Carving", "Armor sets"],
       line: "Hunt it, carve it, craft better armor, then go hunt something bigger." },
-    { num: "IV", name: "FIRE EMBLEM", color: "#e63946", sprite: "sword", tag: "TACTICS · WEAPON TRIANGLE",
+    { name: "FIRE EMBLEM", sub: "Tactics and the weapon triangle", sprite: "sword", lv: "LV 20", time: "356:12",
+      loc: "Chapter 24 · Classic mode", tags: ["Tactics", "Weapon triangle", "Permadeath"],
       line: "Sword beats axe, axe beats lance, lance beats sword. Permadeath beats me." },
-    { num: "V", name: "PERSONA", color: "#ff2a2a", sprite: "mask", tag: "CALENDAR · CONFIDANTS · ALL-OUT",
+    { name: "PERSONA", sub: "Calendars, confidants, all-out attacks", sprite: "mask", lv: "LV 99", time: "DAY 187",
+      loc: "After school · Rainy day", tags: ["Calendar", "Social links", "All-out attacks"],
       line: "Dungeons at night, school during the day. Every day on the calendar counts." },
-    { num: "VI", name: "JRPG & RPG", color: "#ffd166", sprite: "potion", tag: "PARTIES · GRINDING · EPIC OSTS",
+    { name: "JRPG & RPG", sub: "Parties, grinding, epic soundtracks", sprite: "potion", lv: "LV 99", time: "∞",
+      loc: "The last save point", tags: ["Turn-based", "Action", "Grinding"],
       line: "Turn-based, action, tactics, all of it. Grinding XP at 3 AM." },
   ];
-  const arcanaEl = $("arcanaCards");
-  ARCANA.forEach((a) => {
+  const fileList = $("fileList");
+  const fileDetail = $("fileDetail");
+  let fileTimer;
+
+  function showFile(i, instant) {
+    const f = FILES[i];
+    fileList.querySelectorAll(".slot").forEach((b, j) => b.setAttribute("aria-selected", String(j === i)));
+    const render = () => {
+      const art = document.createElement("div");
+      art.className = "art";
+      art.appendChild(spriteCanvas(f.sprite, 10));
+      fileDetail.innerHTML =
+        `<h3>${f.name}</h3><div class="loc">LOCATION · ${f.loc}<br>PLAYTIME · ${f.time}</div>` +
+        `<p>${f.line}</p><div class="tags">${f.tags.map((t) => `<span>${t}</span>`).join("")}</div>`;
+      fileDetail.prepend(art);
+      fileDetail.firstChild.animate([{ transform: "scale(.4)", opacity: 0 }, { transform: "scale(1)", opacity: 1 }], { duration: 300, easing: "cubic-bezier(.3,1.5,.5,1)" });
+    };
+    clearTimeout(fileTimer);
+    if (instant) return render();
+    fileDetail.innerHTML = `<p class="loading">LOADING FILE ${i + 1}...</p>`;
+    blip([660, 880, 990], 0.05);
+    fileTimer = setTimeout(render, 420);
+    once("file-" + i, () => addExp(25));
+  }
+
+  FILES.forEach((f, i) => {
     const b = document.createElement("button");
-    b.className = "card";
-    b.style.setProperty("--c", a.color);
-    b.setAttribute("aria-label", `${a.name}: ${a.line}`);
+    b.className = "slot";
+    b.setAttribute("role", "option");
     b.innerHTML =
-      `<div class="card-face card-front"><span class="card-num">${a.num}</span><div class="card-art"></div><span class="card-name">${a.name}</span></div>` +
-      `<div class="card-face card-back"><h4>${a.name}</h4><p>${a.line}</p><small>${a.tag}</small></div>`;
-    b.querySelector(".card-art").appendChild(spriteCanvas(a.sprite, 6));
-    b.addEventListener("click", () => {
-      b.classList.toggle("flipped");
-      blip(b.classList.contains("flipped") ? [660, 880] : [880, 660], 0.05, "triangle");
-      once("arcana-" + a.num, () => addExp(25));
-    });
-    arcanaEl.appendChild(b);
+      `<span class="slot-num">FILE ${i + 1}</span><span class="slot-icon"></span>` +
+      `<span class="slot-title">${f.name}<small>${f.sub}</small></span>` +
+      `<span class="slot-meta">${f.lv}<span>${f.time}</span></span>`;
+    b.querySelector(".slot-icon").appendChild(spriteCanvas(f.sprite, 3));
+    b.addEventListener("click", () => showFile(i));
+    fileList.appendChild(b);
   });
+  showFile(0, true);
 
   /* =========================================================
      CHAPTER IV — TOY CHEST PHYSICS
@@ -1470,6 +1693,7 @@
     }
 
     if (B) {
+      if (e.key === "Escape" && !cmdEl.dataset.sub) { e.preventDefault(); leaveBattle(); return; }
       if (!B.menu) return;
       if (e.key === "ArrowUp") { e.preventDefault(); B.menu.move(-1); }
       else if (e.key === "ArrowDown") { e.preventDefault(); B.menu.move(1); }
