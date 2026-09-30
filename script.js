@@ -578,7 +578,10 @@
   function oval(cx, cy, rx, ry, n = 20) { return Array.from({ length: n }, (_, i) => [cx + rx * Math.cos((i / n) * 6.283), cy + ry * Math.sin((i / n) * 6.283)]); }
 
   /* draw one part: fill, rim-shade, outline */
+  let XF = null, withSide = (pts, fn) => fn();
+  const xfPt = (x, y) => { const p = XF([x + 0.5, y + 0.5]); return [Math.floor(p[0]), Math.floor(p[1])]; };
   function celPart(G, polys, mat, o = {}) {
+    if (XF) polys = polys.map((p) => withSide(p, () => p.map(XF)));
     const all = o.sym ? polys.concat(polys.map((p) => mirrorPts(p, G.w))) : polys;
     const m = celMask(G, all);
     const at = (x, y) => y >= 0 && y < G.h && x >= 0 && x < G.w && m[y][x];
@@ -604,6 +607,7 @@
     return m;
   }
   function celLine(G, x1, y1, x2, y2, mat, t, sym) {
+    if (XF) withSide([[x1, y1], [x2, y2]], () => { [x1, y1] = xfPt(x1, y1); [x2, y2] = xfPt(x2, y2); });
     const n = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)) || 1;
     for (let i = 0; i <= n; i++) {
       const x = Math.round(x1 + ((x2 - x1) * i) / n), y = Math.round(y1 + ((y2 - y1) * i) / n);
@@ -612,6 +616,7 @@
     }
   }
   function celDot(G, x, y, mat, t, sym) {
+    if (XF) [x, y] = xfPt(x, y);
     if (x >= 0 && y >= 0 && x < G.w && y < G.h) G.px[y][x] = [mat, t];
     if (sym) { const mx = G.w - 1 - x; if (G.px[y]) G.px[y][mx] = [mat, t]; }
   }
@@ -691,6 +696,7 @@
 
   // any polygon, extruded toward the upper right: faces pointing up are lit, faces pointing right are shaded
   function prism(G, pts, d, mat, o = {}) {
+    if (XF) pts = withSide(pts, () => pts.map(XF));
     const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length, cy = pts.reduce((a, p) => a + p[1], 0) / pts.length;
     const faces = [];
     for (let i = 0; i < pts.length; i++) {
@@ -722,14 +728,77 @@
     }
   }
   const mir = (pts) => pts.map(([x, y]) => [MECH_W - x, y]);
+
+  /* ---------- pose rig: every part bends with its joint (deg > 0 swings the lower end left) ---------- */
+  const POSE_W = 112, POSE_H = 104, POSE_OX = 20, POSE_OY = 16;
+  const RIGS = {
+    striker: { waist: [36, 46], neck: [36, 22], hip: [30, 50], knee: 62, sh: [16, 29], elbow: 42, hand: [57, 57] },
+    titan: { waist: [36, 50], neck: [36, 24], hip: [27, 54], knee: 66, sh: [11, 30], elbow: 49, hand: [61, 64] },
+    support: { waist: [36, 46], neck: [36, 26], hip: [32, 51], knee: 60, sh: [19, 32], elbow: 46, hand: [54, 55] },
+  };
+  // per class, per weapon: lean, head, legs [thigh, shin], arms [upper, fore], weapon angle
+  const POSES = {
+    striker: [
+      { lean: 6, head: -6, legL: [18, -18, -6], legR: [-24, 24, 7], armL: [28, -46], armR: [-62, -24], w: 84 },
+      { lean: -5, head: 8, legL: [20, -20, -7], legR: [-26, 26, 8], armL: [34, -58], armR: [-128, -18], w: 108 },
+      { lean: 7, head: -4, legL: [18, -18, -6], legR: [-22, 22, 7], armL: [30, -50], armR: [-40, -38], w: 70 },
+    ],
+    titan: [
+      { lean: 3, head: -4, legL: [10, -10, -6], legR: [-10, 10, 6], armL: [18, -40], armR: [-42, -30], w: 70 },
+      { lean: -2, head: 0, legL: [10, -10, -6], legR: [-10, 10, 6], armL: [24, -70], armR: [-24, 70], w: 0 },
+      { lean: -6, head: 6, legL: [12, -12, -6], legR: [-10, 10, 7], armL: [22, -42], armR: [-150, -12], w: 150 },
+    ],
+    support: [
+      { lean: 5, head: 12, legL: [10, -10, -4], legR: [-18, 18, 6], armL: [16, -34], armR: [-52, -34], w: 62 },
+      { lean: -4, head: 8, legL: [12, -12, -5], legR: [-12, 12, 5], armL: [8, -50], armR: [-20, -30], w: 8 },
+      { lean: 6, head: 10, legL: [10, -10, -4], legR: [-18, 18, 6], armL: [18, -40], armR: [-66, -22], w: 88 },
+    ],
+  };
+  const rotAbout = (p, c, deg) => {
+    if (!deg) return p;
+    const a = (deg * Math.PI) / 180, sn = Math.sin(a), co = Math.cos(a), dx = p[0] - c[0], dy = p[1] - c[1];
+    return [c[0] + co * dx - sn * dy, c[1] + sn * dx + co * dy];
+  };
+  let RIG = null, POSE = null, TAG = "torso", SIDE = null;
+  const sideOf = (p) => SIDE || (p[0] < 36 ? "L" : "R");
+  const mirrorJoint = (j, side) => (side === "L" ? j : [72 - j[0], j[1]]);
+  const torsoXF = (p) => rotAbout(p, RIG.waist, POSE.lean);
+  function limbXF(p, side, isArm, forceLower) {
+    const root = mirrorJoint(isArm ? RIG.sh : RIG.hip, side);
+    const joint = [root[0], isArm ? RIG.elbow : RIG.knee];
+    const [up, lo, dx = 0] = POSE[(isArm ? "arm" : "leg") + side];
+    const q = forceLower || p[1] > joint[1] ? rotAbout(p, joint, lo) : p;
+    const r = rotAbout(q, root, up);
+    return isArm ? torsoXF(r) : [r[0] + dx, r[1]];
+  }
+  function poseXF(p) {
+    let q;
+    if (TAG === "leg") q = limbXF(p, sideOf(p), false);
+    else if (TAG === "arm") q = limbXF(p, sideOf(p), true);
+    else if (TAG === "weapon") {
+      const side = SIDE || "R";
+      const hand = side === "R" ? RIG.hand : [72 - RIG.hand[0], RIG.hand[1]];
+      q = limbXF(rotAbout(p, hand, side === "R" ? POSE.w : 0), side, true, true);
+    } else if (TAG === "head") q = torsoXF(rotAbout(p, RIG.neck, POSE.head));
+    else q = torsoXF(p);
+    return [q[0] + POSE_OX, q[1] + POSE_OY];
+  }
+  withSide = (pts, fn) => {
+    if (SIDE || (TAG !== "leg" && TAG !== "arm")) return fn();
+    SIDE = pts.reduce((a, p) => a + p[0], 0) / pts.length < 36 ? "L" : "R";
+    try { return fn(); } finally { SIDE = null; }
+  };
+  function PT(tag, side) { TAG = tag; SIDE = side || null; }
   function prismPair(G, pts, d, mat, o) { prism(G, pts, d, mat, o); prism(G, mir(pts), d, mat, o); }
   function lineP(G, x1, y1, x2, y2, mat, t, pair) { celLine(G, x1, y1, x2, y2, mat, t); if (pair) celLine(G, MECH_W - 1 - x1, y1, MECH_W - 1 - x2, y2, mat, t); }
   function dotP(G, x, y, mat, t, pair) { celDot(G, x, y, mat, t); if (pair) celDot(G, MECH_W - 1 - x, y, mat, t); }
 
   function drawStriker(G, w) {
+    PT("torso");
     // wing binders
     prismPair(G, [[21, 30], [5, 9], [9, 7], [25, 26]], 2, "m2");
     prismPair(G, [[5, 9], [9, 7], [11, 10], [7, 12]], 0, "m3", { outline: false });
+    PT("leg");
     // legs
     prismPair(G, [[25, 50], [34, 50], [33, 61], [27, 61]], 2, "f");
     prismPair(G, [[23, 63], [34, 63], [35, 76], [21, 76]], 3, "m1");
@@ -738,6 +807,7 @@
     dotP(G, 29, 60, "e", 5, true);
     prismPair(G, [[18, 76], [35, 76], [36, 82], [15, 82]], 2, "m2");
     prismPair(G, [[15, 80], [21, 80], [21, 82], [15, 82]], 0, "m3", { outline: false });
+    PT("torso");
     // pelvis + skirt
     prism(G, [[27, 45], [45, 45], [43, 53], [29, 53]], 2, "f");
     prismPair(G, [[19, 44], [28, 44], [27, 53], [21, 51]], 2, "m1");
@@ -752,6 +822,7 @@
     [[35, 30, 5], [36, 30, 5], [35, 31, 5], [36, 31, 5], [34, 30, 3], [37, 30, 3], [35, 29, 3], [36, 32, 3]].forEach(([x, y, t]) => celDot(G, x, y, "e", t));
     // collar + head
     prism(G, [[29, 21], [43, 21], [44, 26], [28, 26]], 2, "m2");
+    PT("head");
     prism(G, [[31, 10], [41, 10], [43, 14], [42, 21], [30, 21], [29, 14]], 2, "m2");
     prism(G, [[32, 17], [40, 17], [39, 21], [33, 21]], 1, "m2", { flat: true });
     lineP(G, 31, 14, 34, 15, "d", 0); lineP(G, 40, 14, 37, 15, "d", 0);
@@ -760,6 +831,7 @@
     prism(G, [[34, 20], [38, 20], [38, 22], [34, 22]], 0, "m1", { outline: false });
     prism(G, [[34, 11], [35, 4], [37, 4], [38, 11]], 1, "m1");
     prismPair(G, [[35, 12], [26, 4], [28, 3], [36, 9]], 1, "m3");
+    PT("arm");
     // shoulders
     prismPair(G, [[7, 21], [22, 19], [25, 25], [23, 33], [9, 34], [6, 27]], 3, "m1");
     lineP(G, 8, 27, 23, 25, "m3", 3, true); lineP(G, 8, 28, 23, 26, "m3", 2, true);
@@ -771,6 +843,7 @@
     lineP(G, 11, 45, 11, 49, "e", 4, true);
     prismPair(G, [[11, 51], [22, 51], [22, 54], [12, 54]], 1, "m2");
     prismPair(G, [[12, 54], [21, 54], [20, 60], [13, 60]], 2, "f");
+    PT("weapon", "R");
     // weapon (viewer's right hand)
     if (w === 0) {
       prism(G, [[44, 53], [66, 53], [66, 58], [44, 58]], 2, "g");
@@ -790,6 +863,7 @@
   }
 
   function drawTitan(G, w) {
+    PT("torso");
     if (w === 1) {
       prismPair(G, [[3, 2], [10, 2], [10, 20], [3, 20]], 2, "g");
       prismPair(G, [[3, 2], [10, 2], [10, 4], [3, 4]], 0, "d", { outline: false });
@@ -798,6 +872,7 @@
       prismPair(G, [[14, 7], [21, 7], [21, 22], [14, 22]], 2, "f");
       prismPair(G, [[14, 7], [21, 7], [21, 9], [14, 9]], 0, "d", { outline: false });
     }
+    PT("leg");
     // legs
     prismPair(G, [[21, 53], [33, 53], [32, 61], [22, 61]], 2, "f");
     prismPair(G, [[18, 64], [34, 64], [36, 76], [16, 76]], 3, "m1");
@@ -805,6 +880,7 @@
     prismPair(G, [[18, 58], [34, 58], [35, 64], [18, 65]], 3, "m2");
     dotP(G, 24, 61, "e", 5, true); dotP(G, 25, 61, "e", 4, true);
     prismPair(G, [[11, 76], [36, 76], [37, 83], [9, 83]], 3, "m2");
+    PT("torso");
     // pelvis
     prism(G, [[23, 48], [49, 48], [47, 56], [25, 56]], 2, "f");
     // torso
@@ -813,11 +889,13 @@
     for (let y = 28; y <= 36; y += 2) lineP(G, 29, y, 42, y, "m2", 1);
     prism(G, [[18, 43], [54, 43], [53, 46], [19, 46]], 1, "m3");
     [[35, 40, 5], [36, 40, 5], [34, 40, 4], [37, 40, 4], [35, 41, 4], [36, 41, 4]].forEach(([x, y, t]) => celDot(G, x, y, "e", t));
+    PT("head");
     // head sunk between the shoulders
     prism(G, [[30, 14], [42, 14], [44, 18], [42, 25], [30, 25], [28, 18]], 2, "m1");
     lineP(G, 30, 18, 42, 18, "d", 0); lineP(G, 30, 19, 42, 19, "d", 0);
     [[31, 18], [32, 18], [31, 19], [32, 19], [39, 18], [40, 18], [39, 19], [40, 19]].forEach(([x, y]) => celDot(G, x, y, "e", y === 18 ? 5 : 4));
     prism(G, [[33, 21], [39, 21], [38, 25], [34, 25]], 1, "m2");
+    PT("arm");
     // shoulders
     prismPair(G, [[0, 20], [20, 16], [24, 22], [22, 36], [3, 37], [0, 30]], 3, "m1");
     lineP(G, 1, 26, 23, 23, "m3", 3, true); lineP(G, 1, 27, 23, 24, "m3", 2, true);
@@ -828,6 +906,7 @@
     lineP(G, 3, 46, 3, 52, "e", 4, true);
     prismPair(G, [[3, 58], [17, 58], [18, 66], [3, 66]], 3, "m2");
     lineP(G, 6, 62, 15, 62, "m2", 1, true);
+    PT("weapon", "R");
     if (w === 0) {
       prism(G, [[51, 65], [66, 65], [66, 71], [51, 71]], 2, "m2");
       for (const x of [52, 56, 60]) prism(G, [[x, 71], [x + 3, 71], [x + 3, 82], [x, 82]], 1, "g");
@@ -842,12 +921,14 @@
   }
 
   function drawSupport(G, w) {
+    PT("torso");
     // back: pack, antenna, radar dish
     prism(G, [[22, 16], [50, 16], [50, 40], [22, 40]], 3, "m2");
     celLine(G, 45, 14, 51, 2, "f", 2); celDot(G, 51, 1, "e", 5); celDot(G, 52, 1, "e", 4);
     celPart(G, [oval(12, 18, 4.5, 9)], "f");
     celPart(G, [oval(12.5, 18, 2, 5)], "m3", { outline: false });
     celDot(G, 12, 18, "e", 5);
+    PT("leg");
     // legs
     prismPair(G, [[29, 51], [35, 51], [34, 59], [30, 59]], 2, "f");
     prismPair(G, [[28, 63], [35, 63], [36, 75], [27, 75]], 2, "m1");
@@ -855,23 +936,27 @@
     dotP(G, 31, 60, "e", 5, true);
     prismPair(G, [[22, 75], [37, 75], [38, 82], [20, 82]], 3, "m2");
     for (let x = 23; x < 37; x += 3) { celLine(G, x, 81, x + 2, 77, "m3", 3); celLine(G, MECH_W - 1 - x, 81, MECH_W - 3 - x, 77, "m3", 3); }
+    PT("torso");
     // pelvis + torso
     prism(G, [[29, 46], [43, 46], [42, 53], [30, 53]], 2, "f");
     prism(G, [[23, 28], [49, 28], [47, 44], [41, 49], [31, 49], [25, 44]], 3, "m1");
     prism(G, [[25, 40], [47, 40], [46, 44], [26, 44]], 0, "m3", { outline: false });
     for (let x = 26; x < 46; x += 4) celLine(G, x, 44, x + 3, 40, "m1", 3);
     prism(G, [[31, 31], [41, 31], [41, 37], [31, 37]], 2, "glass");
+    PT("head");
     // head: dome + big mono-eye
     celPart(G, [oval(36, 19, 8, 7)], "m1");
     celPart(G, [oval(38, 19, 4, 4)], "m2", { outline: false, flat: true, tone: 4 });
     celPart(G, [oval(38, 19, 3, 3)], "d", { outline: false, flat: true, tone: 1 });
     [[38, 19, 5], [39, 19, 4], [38, 20, 4], [37, 18, 3]].forEach(([x, y, t]) => celDot(G, x, y, "e", t));
+    PT("arm");
     // shoulders + arms
     prismPair(G, [[14, 26], [24, 26], [25, 33], [15, 35]], 2, "m2");
     prismPair(G, [[16, 35], [22, 35], [21, 41], [17, 41]], 2, "f");
     prismPair(G, [[14, 40], [23, 40], [22, 51], [15, 51]], 2, "m1");
     dotP(G, 15, 45, "e", 5, true);
     prismPair(G, [[15, 51], [21, 51], [21, 56], [15, 56]], 2, "f");
+    PT("weapon", "R");
     if (w === 0) {
       prism(G, [[50, 56], [53, 56], [53, 68], [50, 68]], 1, "f");
       prism(G, [[46, 67], [58, 67], [58, 71], [46, 71]], 2, "m3");
@@ -879,6 +964,7 @@
       prism(G, [[54, 71], [58, 71], [58, 76], [54, 76]], 1, "m3");
       [[52, 76, 5], [51, 78, 4], [53, 79, 4]].forEach(([x, y, t]) => celDot(G, x, y, "e", t));
     } else if (w === 1) {
+      PT("weapon", "L");
       prism(G, [[3, 34], [18, 32], [19, 54], [11, 62], [3, 56]], 3, "m2");
       prism(G, [[6, 38], [15, 37], [16, 52], [11, 57], [6, 53]], 1, "m1");
       prism(G, [[9, 41], [12, 41], [12, 52], [9, 52]], 0, "m3", { outline: false });
@@ -893,8 +979,10 @@
   }
 
   function mechSprite(cls, w, P, scale = 4) {
-    const G = celCanvas(MECH_W, MECH_H);
-    ({ titan: drawTitan, striker: drawStriker, support: drawSupport })[cls](G, w);
+    const G = celCanvas(POSE_W, POSE_H);
+    RIG = RIGS[cls]; POSE = POSES[cls][w] || POSES[cls][0]; PT("torso"); XF = poseXF;
+    try { ({ titan: drawTitan, striker: drawStriker, support: drawSupport })[cls](G, w); }
+    finally { XF = null; }
     return celPaint(G, mechMats(P), scale);
   }
 
