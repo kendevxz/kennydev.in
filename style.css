@@ -808,3 +808,23 @@ body.casual-mode > :not(.casual):not(.mode-gate):not(script) { display: none !im
 /* show stage sprites at their exact pixel scale so pixels stay crisp */
 .bay-unit, .bay.hero-mode .bay-unit { width: auto; max-width: 92%; }
 .stage-unit canvas { width: auto; max-width: 100%; }
+
+/* ---------- mech stage: pedestal + gantry backdrop ---------- */
+.stage-unit { position: relative; display: flex; flex-direction: column; align-items: center; }
+.stage-unit.mech canvas { position: relative; z-index: 1; margin-bottom: -22px; }
+.pedestal {
+  position: relative; width: 118%; height: 46px;
+  background: linear-gradient(180deg, #4a5274 0 26%, #2a3050 26% 100%);
+  clip-path: polygon(7% 0, 93% 0, 100% 40%, 100% 100%, 0 100%, 0 40%);
+  box-shadow: 0 20px 30px rgba(0,0,0,.5);
+}
+.pedestal::before { content: ""; position: absolute; inset: 0 7% auto; height: 2px; background: rgba(255,255,255,.25); }
+.pedestal i { position: absolute; left: 14%; right: 14%; top: 55%; height: 2px; background: var(--gold); box-shadow: 0 0 10px rgba(216,183,101,.7); }
+.bay:not(.hero-mode) {
+  background:
+    linear-gradient(90deg, transparent 8%, rgba(120,130,175,.16) 8% 9.5%, transparent 9.5% 90.5%, rgba(120,130,175,.16) 90.5% 92%, transparent 92%),
+    repeating-linear-gradient(0deg, transparent 0 46px, rgba(216,183,101,.1) 46px 48px),
+    radial-gradient(ellipse at 50% 38%, #243063, #0b1022 72%);
+}
+.bay:not(.hero-mode) .bay-gantry { top: 30%; background: rgba(216,183,101,.1); border-color: rgba(216,183,101,.25); }
+.config .opt-row .swatch { width: 30px; height: 30px; }

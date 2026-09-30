@@ -18,7 +18,7 @@ Visitors can switch views any time from the top bar.
 - **Save point**: a contact form (name, email and message) that sends to kendevxz@gmail.com through FormSubmit. The casual view has the same form
 - **Secret**: the Konami code
 
-All art is original and drawn in code. Mechs and heroes are cel-shaded pixel sprites: flat shapes with automatic rim shading and colored outlines. Series names appear only as text. This is a fan tribute.
+All art is original and drawn in code. Heroes are cel-shaded pixel sprites. Mechs use planar "3D block" shading (lit top faces, dark side faces) with a separate glow color, and each has primary, secondary and glow paint channels. Series names appear only as text. This is a fan tribute.
 
 ## Run locally
 

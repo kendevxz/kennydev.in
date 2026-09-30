@@ -629,194 +629,266 @@
   }
 
   /* =========================================================
-     MECHS — front view, 64 x 72, symmetric bodies, class weapons
+     MECHS — planar "3D block" shading, 72 x 84, glow channel
      ========================================================= */
-  const MECH_W = 64, MECH_H = 72;
+  const MECH_W = 72, MECH_H = 84;
+  const MECH_PRIMARY = [
+    { name: "CRIMSON", hex: "#d8323c" }, { name: "MAROON", hex: "#9a1f2a" }, { name: "ORANGE", hex: "#ee7d2c" },
+    { name: "AMBER", hex: "#f2c12e" }, { name: "MOSS", hex: "#5aa84a" }, { name: "TEAL", hex: "#1fa39c" },
+    { name: "COBALT", hex: "#2f6fe0" }, { name: "NAVY", hex: "#2b3d86" }, { name: "VIOLET", hex: "#6a45d8" },
+    { name: "PEARL", hex: "#e3e8f3" }, { name: "GUNMETAL", hex: "#6b7288" }, { name: "OBSIDIAN", hex: "#34374a" },
+  ];
+  const MECH_SECONDARY = [
+    { name: "STEEL", hex: "#555b73" }, { name: "CARBON", hex: "#2c2f40" }, { name: "WHITE", hex: "#eef2fb" },
+    { name: "SILVER", hex: "#a9b1c4" }, { name: "SAND", hex: "#cdb48a" }, { name: "OLIVE", hex: "#5b6b3a" },
+  ];
+  const MECH_GLOW = [
+    { name: "CYAN", hex: "#3ee6ff" }, { name: "LIME", hex: "#8dff5a" }, { name: "GOLD", hex: "#ffd23f" },
+    { name: "MAGENTA", hex: "#ff4fd8" }, { name: "RED", hex: "#ff3b3b" }, { name: "VIOLET", hex: "#b388ff" }, { name: "WHITE", hex: "#f5f7ff" },
+  ];
   const MECH_CLASSES = {
-    titan: {
-      name: "TITAN", role: "HEAVY",
-      paints: [
-        { name: "CRIMSON", m1: "#d8323c", m2: "#50566e", m3: "#f2b632", eye: "#ffb020" },
-        { name: "MAGMA", m1: "#9a1f2a", m2: "#2f3242", m3: "#ff7a1a", eye: "#ff5a1f" },
-        { name: "IRONCLAD", m1: "#848da0", m2: "#3c4256", m3: "#e63946", eye: "#ff3b3b" },
-        { name: "ROYAL", m1: "#b81b30", m2: "#e0c341", m3: "#f4f1e8", eye: "#7df9ff" },
-      ],
-      weapons: ["GATLING", "TWIN CANNONS", "HAMMER"],
-    },
-    striker: {
-      name: "STRIKER", role: "ASSAULT",
-      paints: [
-        { name: "AZURE", m1: "#2f6fe0", m2: "#eef2fb", m3: "#ffd23f", eye: "#7dff9b", beam: "#ff6bd6" },
-        { name: "MIDNIGHT", m1: "#27397f", m2: "#8b99cf", m3: "#3ee6ff", eye: "#3ee6ff", beam: "#3ee6ff" },
-        { name: "FROST", m1: "#8fb8ff", m2: "#f7f9ff", m3: "#3a6fe0", eye: "#ffd23f", beam: "#7df9ff" },
-        { name: "VIOLET", m1: "#5b40d4", m2: "#ebe5ff", m3: "#ff5fa2", eye: "#ff5fa2", beam: "#c08bff" },
-      ],
-      weapons: ["BEAM RIFLE", "BEAM SABER", "BEAM LANCE"],
-    },
-    support: {
-      name: "SUPPORT", role: "REPAIR",
-      paints: [
-        { name: "AMBER", m1: "#f2c12e", m2: "#4e5268", m3: "#2a2c3c", eye: "#6bff8a", beam: "#9dff6b" },
-        { name: "HAZARD", m1: "#ffd21f", m2: "#262833", m3: "#ff7b00", eye: "#ff4d4d", beam: "#ffb020" },
-        { name: "CITRUS", m1: "#c9e04a", m2: "#43603a", m3: "#f4f1e8", eye: "#3ee6ff", beam: "#3ee6ff" },
-        { name: "DESERT", m1: "#e2b36f", m2: "#7a5c3c", m3: "#2f6fe0", eye: "#7df9ff", beam: "#7df9ff" },
-      ],
-      weapons: ["REPAIR ARM", "SHIELD", "FLARE GUN"],
-    },
+    titan: { name: "TITAN", role: "HEAVY", accent: "#f2b632", def: { primary: 0, secondary: 0, glow: 3 }, weapons: ["GATLING", "TWIN CANNONS", "HAMMER"] },
+    striker: { name: "STRIKER", role: "ASSAULT", accent: "#ffd23f", def: { primary: 6, secondary: 2, glow: 2 }, weapons: ["BEAM RIFLE", "BEAM SABER", "BEAM LANCE"] },
+    support: { name: "SUPPORT", role: "REPAIR", accent: "#2a2c3c", def: { primary: 3, secondary: 1, glow: 1 }, weapons: ["REPAIR ARM", "SHIELD", "FLARE GUN"] },
   };
+  Object.values(MECH_CLASSES).forEach((c) => {
+    c.paints = [{ name: "CLASS", m1: MECH_PRIMARY[c.def.primary].hex, m2: MECH_SECONDARY[c.def.secondary].hex, m3: c.accent, eye: MECH_GLOW[c.def.glow].hex, beam: MECH_GLOW[c.def.glow].hex }];
+  });
   const MECH_KEYS = ["titan", "striker", "support"];
   const HOSTILE_PAINT = { name: "HOSTILE", m1: "#8d929e", m2: "#5b1f2e", m3: "#ff3b3b", eye: "#ff3b3b", beam: "#ff3b3b" };
 
   function mechMats(P) {
     return {
       m1: celRamp(P.m1), m2: celRamp(P.m2), m3: celRamp(P.m3),
-      f: celRamp("#5d6380"), d: celRamp("#2c2f42"), g: celRamp("#8a91a8"),
+      f: celRamp("#565c78"), d: celRamp("#262938"), g: celRamp("#7c839b"),
       glass: celRamp("#5ad1ff"), e: celGlow(P.eye), b: celGlow(P.beam || P.eye),
     };
   }
 
+  // a box seen from slightly above and to the right: lit top, mid front, dark side
+  function block(G, x, y, w, h, d, mat, o = {}) {
+    const c = o.ch || 0;
+    const front = c ? [[x + c, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y + c]] : [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+    const top = d ? [[x + c, y], [x + w, y], [x + w + d, y - d], [x + c + d, y - d]] : null;
+    const side = d ? [[x + w, y], [x + w + d, y - d], [x + w + d, y + h - d], [x + w, y + h]] : null;
+    const polys = [front].concat(top ? [top, side] : []);
+    const mu = celMask(G, polys);
+    if (o.outline !== false) {
+      const at = (px, py) => py >= 0 && py < G.h && px >= 0 && px < G.w && mu[py][px];
+      for (let py = 0; py < G.h; py++) for (let px = 0; px < G.w; px++)
+        if (!mu[py][px] && (at(px + 1, py) || at(px - 1, py) || at(px, py + 1) || at(px, py - 1))) G.px[py][px] = [mat, 0];
+    }
+    const paint = (poly, fn) => { const m = celMask(G, [poly]); for (let py = 0; py < G.h; py++) for (let px = 0; px < G.w; px++) if (m[py][px]) G.px[py][px] = [mat, fn(px, py)]; };
+    if (side) paint(side, () => (o.lit ? 2 : 1));
+    if (top) paint(top, () => 4);
+    const fy1 = y + h - 1;
+    paint(front, (px, py) => (py >= fy1 ? 2 : px <= x + (c ? 1 : 0) && py > y + c ? 4 : c && px + py <= x + y + c + 1 ? 4 : 3));
+  }
+  // place a block mirrored across the centre line, keeping the same lighting
+  function blockPair(G, x, y, w, h, d, mat, o) { block(G, x, y, w, h, d, mat, o); block(G, MECH_W - x - w - d, y, w, h, d, mat, o); }
+  function hl(G, x1, x2, y, mat, t, pair) { for (let x = x1; x <= x2; x++) { celDot(G, x, y, mat, t); if (pair) celDot(G, MECH_W - 1 - x - (pair === true ? 0 : pair), y, mat, t); } }
+  function glowAt(G, pts) { pts.forEach(([x, y, t]) => celDot(G, x, y, "e", t === undefined ? 4 : t)); }
+
+  // any polygon, extruded toward the upper right: faces pointing up are lit, faces pointing right are shaded
+  function prism(G, pts, d, mat, o = {}) {
+    const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length, cy = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+    const faces = [];
+    for (let i = 0; i < pts.length; i++) {
+      const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % pts.length];
+      let nx = y2 - y1, ny = -(x2 - x1);
+      const mx = (x1 + x2) / 2 - cx, my = (y1 + y2) / 2 - cy;
+      if (nx * mx + ny * my < 0) { nx = -nx; ny = -ny; }
+      const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;
+      if (d && nx - ny > 0.2) faces.push({ poly: [[x1, y1], [x2, y2], [x2 + d, y2 - d], [x1 + d, y1 - d]], t: ny < -0.55 ? 4 : nx > 0.55 ? (o.lit ? 2 : 1) : 2 });
+    }
+    const mu = celMask(G, [pts].concat(faces.map((f) => f.poly)));
+    if (o.outline !== false) {
+      const at = (px, py) => py >= 0 && py < G.h && px >= 0 && px < G.w && mu[py][px];
+      for (let py = 0; py < G.h; py++) for (let px = 0; px < G.w; px++)
+        if (!mu[py][px] && (at(px + 1, py) || at(px - 1, py) || at(px, py + 1) || at(px, py - 1))) G.px[py][px] = [o.outlineMat || mat, 0];
+    }
+    faces.sort((a, b) => a.t - b.t).forEach((f) => {
+      const m = celMask(G, [f.poly]);
+      for (let py = 0; py < G.h; py++) for (let px = 0; px < G.w; px++) if (m[py][px]) G.px[py][px] = [mat, f.t];
+    });
+    const m = celMask(G, [pts]);
+    const inF = (px, py) => py >= 0 && py < G.h && px >= 0 && px < G.w && m[py][px];
+    for (let py = 0; py < G.h; py++) for (let px = 0; px < G.w; px++) {
+      if (!m[py][px]) continue;
+      let t = 3;
+      if (!inF(px, py + 1)) t = 2;
+      else if (!inF(px - 1, py) || !inF(px, py - 1)) t = o.flat ? 3 : 4;
+      G.px[py][px] = [mat, o.tone !== undefined ? o.tone : t];
+    }
+  }
+  const mir = (pts) => pts.map(([x, y]) => [MECH_W - x, y]);
+  function prismPair(G, pts, d, mat, o) { prism(G, pts, d, mat, o); prism(G, mir(pts), d, mat, o); }
+  function lineP(G, x1, y1, x2, y2, mat, t, pair) { celLine(G, x1, y1, x2, y2, mat, t); if (pair) celLine(G, MECH_W - 1 - x1, y1, MECH_W - 1 - x2, y2, mat, t); }
+  function dotP(G, x, y, mat, t, pair) { celDot(G, x, y, mat, t); if (pair) celDot(G, MECH_W - 1 - x, y, mat, t); }
+
   function drawStriker(G, w) {
-    // wing binders behind
-    celPart(G, [[[21, 22], [5, 5], [9, 3], [25, 17]], [[19, 28], [3, 24], [4, 19], [22, 23]]], "m1", { sym: true });
-    celPart(G, [[[5, 5], [9, 3], [11, 6], [7, 8]]], "m3", { sym: true, outline: false });
+    // wing binders
+    prismPair(G, [[21, 30], [5, 9], [9, 7], [25, 26]], 2, "m2");
+    prismPair(G, [[5, 9], [9, 7], [11, 10], [7, 12]], 0, "m3", { outline: false });
     // legs
-    celPart(G, [[[24, 41], [31, 41], [31, 50], [25, 50]]], "f", { sym: true });
-    celPart(G, [[[21, 55], [31, 55], [31, 65], [21, 65]]], "m1", { sym: true });
-    celLine(G, 26, 57, 26, 63, "m1", 2, true);
-    celPart(G, [[[21, 49], [31, 49], [31, 55], [24, 57], [20, 53]]], "m2", { sym: true });
-    celPart(G, [[[16, 64], [31, 64], [31, 70], [13, 70]]], "m2", { sym: true });
-    celPart(G, [[[13, 68], [19, 68], [19, 70], [13, 70]]], "m3", { sym: true, outline: false });
-    // waist + skirt
-    celPart(G, [[[24, 37], [32, 37], [32, 43], [25, 43]]], "f", { sym: true });
-    celPart(G, [[[18, 38], [26, 38], [25, 48], [19, 46]]], "m2", { sym: true });
-    celPart(G, [[[28, 39], [36, 39], [35, 47], [29, 47]]], "m3");
-    // torso
-    celPart(G, [[[18, 20], [32, 20], [32, 38], [23, 38], [19, 31]]], "m1", { sym: true });
-    celPart(G, [[[23, 16], [32, 16], [32, 21], [22, 21]]], "m2", { sym: true });
-    celPart(G, [[[23, 24], [30, 24], [30, 30], [24, 30]]], "m3", { sym: true });
-    celLine(G, 24, 26, 29, 26, "m3", 1, true); celLine(G, 24, 28, 29, 28, "m3", 1, true);
-    celPart(G, [[[24, 32], [32, 32], [32, 38], [25, 38]]], "m2", { sym: true });
-    celLine(G, 31, 33, 31, 37, "m2", 1); celLine(G, 32, 33, 32, 37, "m2", 1);
+    prismPair(G, [[25, 50], [34, 50], [33, 61], [27, 61]], 2, "f");
+    prismPair(G, [[23, 63], [34, 63], [35, 76], [21, 76]], 3, "m1");
+    lineP(G, 26, 66, 26, 73, "m1", 2, true); lineP(G, 30, 66, 30, 73, "m1", 2, true);
+    prismPair(G, [[24, 57], [34, 57], [35, 63], [30, 67], [23, 63]], 2, "m2");
+    dotP(G, 29, 60, "e", 5, true);
+    prismPair(G, [[18, 76], [35, 76], [36, 82], [15, 82]], 2, "m2");
+    prismPair(G, [[15, 80], [21, 80], [21, 82], [15, 82]], 0, "m3", { outline: false });
+    // pelvis + skirt
+    prism(G, [[27, 45], [45, 45], [43, 53], [29, 53]], 2, "f");
+    prismPair(G, [[19, 44], [28, 44], [27, 53], [21, 51]], 2, "m1");
+    prism(G, [[32, 46], [40, 46], [36, 58]], 2, "m3");
+    // torso: tapered chest
+    prism(G, [[20, 25], [52, 25], [50, 38], [44, 46], [28, 46], [22, 38]], 3, "m1");
+    prismPair(G, [[23, 27], [34, 27], [34, 34], [25, 36]], 1, "m2");
+    prismPair(G, [[24, 38], [31, 38], [31, 42], [26, 42]], 1, "m3");
+    lineP(G, 26, 40, 30, 40, "m3", 1, true);
+    prism(G, [[30, 40], [42, 40], [41, 46], [31, 46]], 1, "m2");
+    lineP(G, 35, 41, 35, 45, "m2", 1); lineP(G, 36, 41, 36, 45, "m2", 1);
+    [[35, 30, 5], [36, 30, 5], [35, 31, 5], [36, 31, 5], [34, 30, 3], [37, 30, 3], [35, 29, 3], [36, 32, 3]].forEach(([x, y, t]) => celDot(G, x, y, "e", t));
+    // collar + head
+    prism(G, [[29, 21], [43, 21], [44, 26], [28, 26]], 2, "m2");
+    prism(G, [[31, 10], [41, 10], [43, 14], [42, 21], [30, 21], [29, 14]], 2, "m2");
+    prism(G, [[32, 17], [40, 17], [39, 21], [33, 21]], 1, "m2", { flat: true });
+    lineP(G, 31, 14, 34, 15, "d", 0); lineP(G, 40, 14, 37, 15, "d", 0);
+    lineP(G, 31, 15, 34, 16, "e", 5); lineP(G, 40, 15, 37, 16, "e", 5);
+    lineP(G, 34, 18, 34, 20, "m2", 1); lineP(G, 37, 18, 37, 20, "m2", 1);
+    prism(G, [[34, 20], [38, 20], [38, 22], [34, 22]], 0, "m1", { outline: false });
+    prism(G, [[34, 11], [35, 4], [37, 4], [38, 11]], 1, "m1");
+    prismPair(G, [[35, 12], [26, 4], [28, 3], [36, 9]], 1, "m3");
     // shoulders
-    celPart(G, [[[7, 16], [20, 15], [22, 26], [10, 27], [6, 22]]], "m2", { sym: true });
-    celPart(G, [[[7, 21], [21, 20], [21, 23], [7, 24]]], "m1", { sym: true, outline: false });
+    prismPair(G, [[7, 21], [22, 19], [25, 25], [23, 33], [9, 34], [6, 27]], 3, "m1");
+    lineP(G, 8, 27, 23, 25, "m3", 3, true); lineP(G, 8, 28, 23, 26, "m3", 2, true);
+    prismPair(G, [[8, 32], [23, 31], [22, 35], [9, 36]], 1, "m2");
+    dotP(G, 11, 30, "e", 5, true); dotP(G, 12, 30, "e", 4, true);
     // arms
-    celPart(G, [[[12, 27], [18, 27], [18, 34], [13, 34]]], "f", { sym: true });
-    celPart(G, [[[10, 33], [19, 33], [19, 44], [11, 44]]], "m1", { sym: true });
-    celPart(G, [[[11, 44], [18, 44], [18, 49], [12, 49]]], "f", { sym: true });
-    // head
-    celPart(G, [[[26, 8], [32, 7], [32, 17], [27, 17], [25, 12]]], "m2", { sym: true });
-    celPart(G, [[[30, 9], [21, 1], [23, 0], [32, 6]]], "m3", { sym: true });
-    celPart(G, [[[30, 4], [34, 4], [33, 9], [31, 9]]], "m1", { outline: false });
-    celLine(G, 27, 11, 30, 12, "d", 0, true); celLine(G, 27, 12, 30, 13, "e", 4, true);
-    celLine(G, 30, 14, 30, 16, "m2", 1, true);
-    celPart(G, [[[30, 16], [34, 16], [34, 18], [30, 18]]], "m3", { outline: false });
-    // weapon in the right hand (viewer's right)
+    prismPair(G, [[13, 35], [21, 35], [20, 42], [14, 42]], 2, "f");
+    prismPair(G, [[10, 41], [23, 41], [22, 53], [12, 53]], 3, "m1");
+    lineP(G, 11, 45, 11, 49, "e", 4, true);
+    prismPair(G, [[11, 51], [22, 51], [22, 54], [12, 54]], 1, "m2");
+    prismPair(G, [[12, 54], [21, 54], [20, 60], [13, 60]], 2, "f");
+    // weapon (viewer's right hand)
     if (w === 0) {
-      celPart(G, [[[46, 36], [53, 36], [54, 60], [49, 60]]], "g");
-      celPart(G, [[[50, 60], [53, 60], [53, 70], [51, 70]]], "g");
-      celPart(G, [[[53, 40], [57, 40], [57, 48], [53, 48]]], "m2");
-      celDot(G, 55, 42, "e", 4);
+      prism(G, [[44, 53], [66, 53], [66, 58], [44, 58]], 2, "g");
+      prism(G, [[64, 54], [71, 54], [71, 57], [64, 57]], 1, "g");
+      prism(G, [[50, 49], [58, 49], [58, 52], [50, 52]], 2, "m2");
+      celDot(G, 57, 50, "e", 5);
+      prism(G, [[48, 58], [51, 58], [51, 63], [48, 63]], 1, "g");
+      lineP(G, 46, 55, 62, 55, "g", 2);
     } else if (w === 1) {
-      celPart(G, [[[47, 44], [51, 44], [51, 52], [47, 52]]], "f");
-      for (let i = 0; i < 34; i++) { const x = Math.round(50 + i * 0.28), y = 44 - i; celDot(G, x - 1, y, "b", 2); celDot(G, x, y, "b", 5); celDot(G, x + 1, y, "b", 2); }
+      prism(G, [[52, 51], [55, 51], [55, 60], [52, 60]], 1, "f");
+      for (let i = 0; i < 38; i++) { const x = Math.round(53 + i * 0.36), y = 50 - i; celDot(G, x - 1, y, "b", 3); celDot(G, x, y, "b", 5); celDot(G, x + 1, y, "b", 4); celDot(G, x + 2, y, "b", 2); }
     } else {
-      celPart(G, [[[51, 6], [54, 6], [54, 71], [51, 71]]], "f");
-      celPart(G, [[[49, 8], [56, 8], [56, 11], [49, 11]]], "m3");
-      for (let i = 0; i < 9; i++) { const half = Math.max(0, 2 - Math.floor(i / 3)); for (let k = -half; k <= half; k++) celDot(G, 52 + k + 1, 7 - i, "b", k === 0 ? 5 : 2); }
+      prism(G, [[55, 8], [57, 8], [57, 83], [55, 83]], 1, "f");
+      prism(G, [[51, 11], [61, 11], [61, 13], [51, 13]], 1, "m3");
+      for (let i = 0; i < 10; i++) { const half = i < 3 ? 2 : i < 7 ? 1 : 0; for (let k = -half; k <= half; k++) celDot(G, 56 + k, 9 - i, "b", k === 0 ? 5 : 3); }
     }
   }
 
   function drawTitan(G, w) {
-    // exhaust stacks behind the shoulders
-    celPart(G, [[[9, 3], [16, 3], [16, 15], [9, 15]]], "f", { sym: true });
-    celPart(G, [[[9, 2], [16, 2], [16, 5], [9, 5]]], "d", { sym: true, outline: false });
     if (w === 1) {
-      celPart(G, [[[4, 1], [10, 1], [10, 16], [4, 16]]], "g", { sym: true });
-      celPart(G, [[[4, 1], [10, 1], [10, 3], [4, 3]]], "d", { sym: true, outline: false });
-      celPart(G, [[[3, 9], [11, 9], [11, 11], [3, 11]]], "m3", { sym: true, outline: false });
+      prismPair(G, [[3, 2], [10, 2], [10, 20], [3, 20]], 2, "g");
+      prismPair(G, [[3, 2], [10, 2], [10, 4], [3, 4]], 0, "d", { outline: false });
+      prismPair(G, [[3, 12], [10, 12], [10, 14], [3, 14]], 0, "m3", { outline: false });
+    } else {
+      prismPair(G, [[14, 7], [21, 7], [21, 22], [14, 22]], 2, "f");
+      prismPair(G, [[14, 7], [21, 7], [21, 9], [14, 9]], 0, "d", { outline: false });
     }
     // legs
-    celPart(G, [[[21, 45], [31, 45], [31, 52], [22, 52]]], "f", { sym: true });
-    celPart(G, [[[17, 56], [31, 56], [31, 65], [16, 65]]], "m1", { sym: true });
-    celPart(G, [[[17, 59], [31, 59], [31, 61], [17, 61]]], "m3", { sym: true, outline: false });
-    celPart(G, [[[18, 51], [31, 51], [31, 57], [18, 57]]], "m2", { sym: true });
-    celPart(G, [[[11, 64], [31, 64], [31, 70], [9, 70]]], "m2", { sym: true });
-    // waist
-    celPart(G, [[[21, 41], [32, 41], [32, 47], [22, 47]]], "f", { sym: true });
+    prismPair(G, [[21, 53], [33, 53], [32, 61], [22, 61]], 2, "f");
+    prismPair(G, [[18, 64], [34, 64], [36, 76], [16, 76]], 3, "m1");
+    prismPair(G, [[17, 69], [35, 69], [35, 71], [17, 71]], 0, "m3", { outline: false });
+    prismPair(G, [[18, 58], [34, 58], [35, 64], [18, 65]], 3, "m2");
+    dotP(G, 24, 61, "e", 5, true); dotP(G, 25, 61, "e", 4, true);
+    prismPair(G, [[11, 76], [36, 76], [37, 83], [9, 83]], 3, "m2");
+    // pelvis
+    prism(G, [[23, 48], [49, 48], [47, 56], [25, 56]], 2, "f");
     // torso
-    celPart(G, [[[14, 18], [32, 17], [32, 42], [18, 42], [13, 30]]], "m1", { sym: true });
-    celPart(G, [[[25, 21], [32, 21], [32, 32], [25, 32]]], "m2", { sym: true });
-    for (let y = 23; y <= 30; y += 2) celLine(G, 26, y, 31, y, "m2", 1, true);
-    celPart(G, [[[18, 37], [32, 37], [32, 40], [18, 40]]], "m3", { sym: true, outline: false });
-    celDot(G, 31, 34, "e", 4, true); celDot(G, 31, 35, "e", 3, true);
+    prism(G, [[14, 22], [58, 22], [56, 40], [50, 50], [22, 50], [16, 40]], 3, "m1");
+    prism(G, [[27, 26], [45, 26], [44, 38], [28, 38]], 2, "m2");
+    for (let y = 28; y <= 36; y += 2) lineP(G, 29, y, 42, y, "m2", 1);
+    prism(G, [[18, 43], [54, 43], [53, 46], [19, 46]], 1, "m3");
+    [[35, 40, 5], [36, 40, 5], [34, 40, 4], [37, 40, 4], [35, 41, 4], [36, 41, 4]].forEach(([x, y, t]) => celDot(G, x, y, "e", t));
+    // head sunk between the shoulders
+    prism(G, [[30, 14], [42, 14], [44, 18], [42, 25], [30, 25], [28, 18]], 2, "m1");
+    lineP(G, 30, 18, 42, 18, "d", 0); lineP(G, 30, 19, 42, 19, "d", 0);
+    [[31, 18], [32, 18], [31, 19], [32, 19], [39, 18], [40, 18], [39, 19], [40, 19]].forEach(([x, y]) => celDot(G, x, y, "e", y === 18 ? 5 : 4));
+    prism(G, [[33, 21], [39, 21], [38, 25], [34, 25]], 1, "m2");
     // shoulders
-    celPart(G, [[[1, 14], [14, 11], [20, 16], [20, 29], [3, 30], [0, 22]]], "m1", { sym: true });
-    celPart(G, [[[1, 21], [20, 20], [20, 23], [1, 25]]], "m3", { sym: true, outline: false });
-    celDot(G, 5, 16, "m2", 4, true); celDot(G, 16, 15, "m2", 4, true);
+    prismPair(G, [[0, 20], [20, 16], [24, 22], [22, 36], [3, 37], [0, 30]], 3, "m1");
+    lineP(G, 1, 26, 23, 23, "m3", 3, true); lineP(G, 1, 27, 23, 24, "m3", 2, true);
+    [[4, 21], [18, 19], [4, 33], [19, 32]].forEach(([x, y]) => dotP(G, x, y, "m1", 5, true));
     // arms
-    celPart(G, [[[6, 30], [14, 30], [14, 36], [7, 36]]], "f", { sym: true });
-    celPart(G, [[[3, 35], [16, 35], [16, 47], [4, 47]]], "m1", { sym: true });
-    celPart(G, [[[4, 47], [15, 47], [15, 53], [5, 53]]], "m2", { sym: true });
-    // head, sunk between the shoulders
-    celPart(G, [[[26, 10], [32, 9], [32, 19], [27, 19], [25, 14]]], "m1", { sym: true });
-    celPart(G, [[[26, 13], [32, 13], [32, 16], [26, 16]]], "d", { sym: true, outline: false });
-    celLine(G, 27, 14, 31, 14, "e", 4, true);
-    celPart(G, [[[28, 17], [32, 17], [32, 20], [28, 20]]], "m2", { sym: true, outline: false });
+    prismPair(G, [[6, 36], [15, 36], [15, 43], [7, 43]], 2, "f");
+    prismPair(G, [[2, 42], [18, 42], [17, 58], [4, 58]], 3, "m1");
+    lineP(G, 3, 46, 3, 52, "e", 4, true);
+    prismPair(G, [[3, 58], [17, 58], [18, 66], [3, 66]], 3, "m2");
+    lineP(G, 6, 62, 15, 62, "m2", 1, true);
     if (w === 0) {
-      celPart(G, [[[49, 50], [58, 50], [58, 56], [49, 56]]], "m2");
-      for (const x of [50, 53, 56]) celPart(G, [[[x, 56], [x + 2, 56], [x + 2, 70], [x, 70]]], "g");
-      celPart(G, [[[49, 64], [59, 64], [59, 66], [49, 66]]], "m3", { outline: false });
+      prism(G, [[51, 65], [66, 65], [66, 71], [51, 71]], 2, "m2");
+      for (const x of [52, 56, 60]) prism(G, [[x, 71], [x + 3, 71], [x + 3, 82], [x, 82]], 1, "g");
+      prism(G, [[51, 75], [65, 75], [65, 77], [51, 77]], 1, "m3");
+      celDot(G, 63, 67, "e", 5);
     } else if (w === 2) {
-      celPart(G, [[[53, 16], [56, 16], [56, 60], [53, 60]]], "f");
-      celPart(G, [[[45, 4], [63, 4], [63, 18], [45, 18]]], "m2");
-      celPart(G, [[[47, 6], [61, 6], [61, 16], [47, 16]]], "m3", { outline: false });
+      prism(G, [[59, 22], [62, 22], [62, 60], [59, 60]], 1, "f");
+      prism(G, [[50, 7], [69, 7], [69, 21], [50, 21]], 3, "m2");
+      prism(G, [[52, 10], [67, 10], [67, 18], [52, 18]], 1, "m3");
+      [[59, 13], [60, 13], [59, 14], [60, 14]].forEach(([x, y]) => celDot(G, x, y, "e", 5));
     }
   }
 
   function drawSupport(G, w) {
-    // back: radar dish (left) and crane arm (right)
-    celPart(G, [oval(10, 12, 4, 8)], "f");
-    celPart(G, [oval(10.5, 12, 1.6, 4)], "m3", { outline: false });
-    celDot(G, 10, 12, "e", 5);
-    celPart(G, [[[40, 18], [44, 18], [54, 2], [51, 0]]], "m1");
-    celPart(G, [[[50, 0], [58, 0], [58, 5], [55, 5], [55, 8], [52, 8], [52, 5], [50, 5]]], "g");
+    // back: pack, antenna, radar dish
+    prism(G, [[22, 16], [50, 16], [50, 40], [22, 40]], 3, "m2");
+    celLine(G, 45, 14, 51, 2, "f", 2); celDot(G, 51, 1, "e", 5); celDot(G, 52, 1, "e", 4);
+    celPart(G, [oval(12, 18, 4.5, 9)], "f");
+    celPart(G, [oval(12.5, 18, 2, 5)], "m3", { outline: false });
+    celDot(G, 12, 18, "e", 5);
     // legs
-    celPart(G, [[[26, 43], [31, 43], [31, 51], [27, 51]]], "f", { sym: true });
-    celPart(G, [[[25, 56], [31, 56], [31, 64], [25, 64]]], "m1", { sym: true });
-    celPart(G, [oval(28, 53, 4, 3.5)], "m1", { sym: true });
-    celPart(G, [[[19, 63], [31, 63], [31, 70], [17, 70]]], "m2", { sym: true });
-    for (let x = 19; x < 31; x += 3) celLine(G, x, 69, x + 2, 65, "m1", 3, true);
-    // waist
-    celPart(G, [[[26, 38], [32, 38], [32, 44], [26, 44]]], "f", { sym: true });
-    // torso
-    celPart(G, [[[20, 20], [32, 19], [32, 39], [24, 39], [20, 33]]], "m1", { sym: true });
-    celPart(G, [[[21, 32], [32, 32], [32, 36], [22, 36]]], "m3", { sym: true, outline: false });
-    for (let x = 21; x < 32; x += 3) celLine(G, x, 36, x + 3, 32, "m1", 3, true);
-    celPart(G, [[[29, 23], [35, 23], [35, 29], [29, 29]]], "glass");
+    prismPair(G, [[29, 51], [35, 51], [34, 59], [30, 59]], 2, "f");
+    prismPair(G, [[28, 63], [35, 63], [36, 75], [27, 75]], 2, "m1");
+    prismPair(G, [[27, 57], [36, 57], [36, 63], [27, 63]], 2, "m1");
+    dotP(G, 31, 60, "e", 5, true);
+    prismPair(G, [[22, 75], [37, 75], [38, 82], [20, 82]], 3, "m2");
+    for (let x = 23; x < 37; x += 3) { celLine(G, x, 81, x + 2, 77, "m3", 3); celLine(G, MECH_W - 1 - x, 81, MECH_W - 3 - x, 77, "m3", 3); }
+    // pelvis + torso
+    prism(G, [[29, 46], [43, 46], [42, 53], [30, 53]], 2, "f");
+    prism(G, [[23, 28], [49, 28], [47, 44], [41, 49], [31, 49], [25, 44]], 3, "m1");
+    prism(G, [[25, 40], [47, 40], [46, 44], [26, 44]], 0, "m3", { outline: false });
+    for (let x = 26; x < 46; x += 4) celLine(G, x, 44, x + 3, 40, "m1", 3);
+    prism(G, [[31, 31], [41, 31], [41, 37], [31, 37]], 2, "glass");
+    // head: dome + big mono-eye
+    celPart(G, [oval(36, 19, 8, 7)], "m1");
+    celPart(G, [oval(38, 19, 4, 4)], "m2", { outline: false, flat: true, tone: 4 });
+    celPart(G, [oval(38, 19, 3, 3)], "d", { outline: false, flat: true, tone: 1 });
+    [[38, 19, 5], [39, 19, 4], [38, 20, 4], [37, 18, 3]].forEach(([x, y, t]) => celDot(G, x, y, "e", t));
     // shoulders + arms
-    celPart(G, [oval(18, 22, 5, 4.5)], "m2", { sym: true });
-    celPart(G, [[[15, 26], [19, 26], [19, 34], [15, 34]]], "f", { sym: true });
-    celPart(G, [[[14, 33], [20, 33], [20, 43], [14, 43]]], "m1", { sym: true });
-    celPart(G, [[[15, 43], [19, 43], [19, 47], [15, 47]]], "f", { sym: true });
-    // head: dome, visor, mono-eye, antenna
-    celPart(G, [oval(32, 12, 7, 6.5)], "m1");
-    celPart(G, [[[25, 11], [39, 11], [39, 15], [25, 15]]], "d", { outline: false });
-    celPart(G, [oval(32, 13, 2, 2)], "e", { outline: false, flat: true, tone: 3 });
-    celDot(G, 31, 12, "e", 5);
-    celLine(G, 36, 6, 40, 0, "f", 2); celDot(G, 40, 0, "m3", 4); celDot(G, 41, 0, "m3", 3);
+    prismPair(G, [[14, 26], [24, 26], [25, 33], [15, 35]], 2, "m2");
+    prismPair(G, [[16, 35], [22, 35], [21, 41], [17, 41]], 2, "f");
+    prismPair(G, [[14, 40], [23, 40], [22, 51], [15, 51]], 2, "m1");
+    dotP(G, 15, 45, "e", 5, true);
+    prismPair(G, [[15, 51], [21, 51], [21, 56], [15, 56]], 2, "f");
     if (w === 0) {
-      celPart(G, [[[45, 46], [49, 46], [49, 58], [45, 58]]], "f");
-      celPart(G, [[[42, 57], [52, 57], [52, 60], [49, 60], [49, 63], [52, 63], [52, 66], [42, 66]]], "m1");
-      celDot(G, 53, 61, "b", 5); celDot(G, 54, 59, "b", 3); celDot(G, 54, 63, "b", 3);
+      prism(G, [[50, 56], [53, 56], [53, 68], [50, 68]], 1, "f");
+      prism(G, [[46, 67], [58, 67], [58, 71], [46, 71]], 2, "m3");
+      prism(G, [[46, 71], [50, 71], [50, 76], [46, 76]], 1, "m3");
+      prism(G, [[54, 71], [58, 71], [58, 76], [54, 76]], 1, "m3");
+      [[52, 76, 5], [51, 78, 4], [53, 79, 4]].forEach(([x, y, t]) => celDot(G, x, y, "e", t));
     } else if (w === 1) {
-      celPart(G, [[[1, 28], [14, 26], [15, 46], [8, 56], [1, 50]]], "m2");
-      celPart(G, [[[3, 30], [12, 29], [13, 45], [8, 52], [3, 47]]], "m1", { outline: false });
-      celPart(G, [[[7, 34], [9, 34], [9, 46], [7, 46]], [[3, 39], [13, 39], [13, 41], [3, 41]]], "m3", { outline: false });
+      prism(G, [[3, 34], [18, 32], [19, 54], [11, 62], [3, 56]], 3, "m2");
+      prism(G, [[6, 38], [15, 37], [16, 52], [11, 57], [6, 53]], 1, "m1");
+      prism(G, [[9, 41], [12, 41], [12, 52], [9, 52]], 0, "m3", { outline: false });
+      prism(G, [[6, 45], [15, 45], [15, 48], [6, 48]], 0, "m3", { outline: false });
+      [[10, 36], [11, 36]].forEach(([x, y]) => celDot(G, x, y, "e", 5));
     } else {
-      celPart(G, [[[44, 44], [50, 44], [50, 62], [44, 62]]], "m2");
-      celPart(G, [[[44, 62], [50, 62], [50, 64], [44, 64]]], "d", { outline: false });
-      celPart(G, [[[44, 50], [50, 50], [50, 52], [44, 52]]], "m1", { outline: false });
+      prism(G, [[45, 49], [65, 49], [65, 55], [45, 55]], 2, "m2");
+      prism(G, [[63, 50], [67, 50], [67, 54], [63, 54]], 1, "d");
+      prism(G, [[52, 49], [55, 49], [55, 55], [52, 55]], 0, "m1", { outline: false });
+      [[58, 51], [59, 51]].forEach(([x, y]) => celDot(G, x, y, "e", 5));
     }
   }
 
@@ -1158,10 +1230,17 @@
   }
 
   const savedMech = store.get("kd5-mech", {}) || {};
-  const cfg = { cls: CLASS_KEYS.includes(savedMech.cls) ? savedMech.cls : "striker", paint: 0, weapon: 0 };
-  if (CLASSES[cfg.cls].paints[savedMech.paint]) cfg.paint = savedMech.paint;
+  const cfg = { cls: CLASS_KEYS.includes(savedMech.cls) ? savedMech.cls : "striker", weapon: 0 };
+  Object.assign(cfg, CLASSES[cfg.cls].def);
   if (CLASSES[cfg.cls].weapons[savedMech.weapon]) cfg.weapon = savedMech.weapon;
-  const paintOf = (c = cfg) => CLASSES[c.cls].paints[c.paint];
+  if (MECH_PRIMARY[savedMech.primary]) cfg.primary = savedMech.primary;
+  if (MECH_SECONDARY[savedMech.secondary]) cfg.secondary = savedMech.secondary;
+  if (MECH_GLOW[savedMech.glow]) cfg.glow = savedMech.glow;
+  const paintOf = (c = cfg) => ({
+    name: `${c.primary}-${c.secondary}-${c.glow}`,
+    m1: MECH_PRIMARY[c.primary].hex, m2: MECH_SECONDARY[c.secondary].hex, m3: CLASSES[c.cls].accent,
+    eye: MECH_GLOW[c.glow].hex, beam: MECH_GLOW[c.glow].hex,
+  });
 
   const savedHero = store.get("kd5-hero", {}) || {};
   const hero = {
@@ -1235,6 +1314,7 @@
     const wrap = document.createElement("div");
     wrap.className = "stage-unit " + kind;
     wrap.appendChild(canvas);
+    if (kind === "mech") wrap.insertAdjacentHTML("beforeend", `<div class="pedestal" aria-hidden="true"><i></i></div>`);
     bayUnit.replaceChildren(wrap);
     wrap.animate([{ transform: "translateY(10px) scale(.96)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 260, easing: "ease-out" });
   }
@@ -1274,14 +1354,29 @@
     $("unitMode").textContent = d.role;
     configPanel.innerHTML = `<h3>MECH CONFIG</h3>`;
     configPanel.appendChild(optionRow("CLASS", CLASS_KEYS.map((k) => ({ key: k, name: CLASSES[k].name, sub: CLASSES[k].role, color: CLASSES[k].paints[0].m1 })),
-      (it) => it.key === cfg.cls, (it) => { cfg.cls = it.key; cfg.paint = 0; cfg.weapon = 0; saveMech(); }));
-    configPanel.appendChild(optionRow("PAINT", d.paints.map((p) => ({ name: p.name, a: p.m1, b: p.m2, c: p.m3 })), (it, i) => i === cfg.paint, (it, i) => { cfg.paint = i; saveMech(); }, "swatch", paintOf().name));
+      (it) => it.key === cfg.cls, (it) => { cfg.cls = it.key; cfg.weapon = 0; Object.assign(cfg, CLASSES[it.key].def); saveMech(); }));
     configPanel.appendChild(optionRow("WEAPON", d.weapons.map((n) => ({ name: n })), (it, i) => i === cfg.weapon, (it, i) => { cfg.weapon = i; saveMech(); }));
+    const sw = (list) => list.map((c) => ({ name: c.name, a: c.hex }));
+    configPanel.appendChild(optionRow("PRIMARY", sw(MECH_PRIMARY), (it, i) => i === cfg.primary, (it, i) => { cfg.primary = i; saveMech(); }, "swatch", MECH_PRIMARY[cfg.primary].name));
+    configPanel.appendChild(optionRow("SECONDARY", sw(MECH_SECONDARY), (it, i) => i === cfg.secondary, (it, i) => { cfg.secondary = i; saveMech(); }, "swatch", MECH_SECONDARY[cfg.secondary].name));
+    configPanel.appendChild(optionRow("GLOW", sw(MECH_GLOW), (it, i) => i === cfg.glow, (it, i) => { cfg.glow = i; saveMech(); }, "swatch", MECH_GLOW[cfg.glow].name));
     const base = CLASS_INFO[cfg.cls].stats, w = CLASS_INFO[cfg.cls].wmods[cfg.weapon];
     const stats = document.createElement("div");
     stats.className = "stats";
     stats.innerHTML = statRows(STAT_NAMES, base.map((v, i) => v + w[i]));
     configPanel.appendChild(stats);
+    const acts = document.createElement("div");
+    acts.className = "config-actions";
+    acts.innerHTML = `<button class="btn btn-alt" type="button" data-act="reset">CLASS COLORS</button><button class="btn btn-alt" type="button" data-act="random">RANDOMIZE</button>`;
+    acts.addEventListener("click", (e) => {
+      const act = e.target.closest("[data-act]");
+      if (!act) return;
+      if (act.dataset.act === "reset") Object.assign(cfg, CLASSES[cfg.cls].def);
+      else { cfg.primary = Math.floor(rand(0, MECH_PRIMARY.length)); cfg.secondary = Math.floor(rand(0, MECH_SECONDARY.length)); cfg.glow = Math.floor(rand(0, MECH_GLOW.length)); cfg.weapon = Math.floor(rand(0, 3)); }
+      blip([523, 659, 784], 0.05);
+      saveMech();
+    });
+    configPanel.appendChild(acts);
   }
   function saveMech() { store.set("kd5-mech", cfg); renderMech(); }
 
