@@ -739,14 +739,14 @@
   // per class, per weapon: lean, head, legs [thigh, shin], arms [upper, fore], weapon angle
   const POSES = {
     striker: [
-      { lean: 6, head: -6, legL: [18, -18, -6], legR: [-24, 24, 7], armL: [28, -46], armR: [-62, -24], w: 84 },
-      { lean: -5, head: 8, legL: [20, -20, -7], legR: [-26, 26, 8], armL: [34, -58], armR: [-128, -18], w: 108 },
-      { lean: 7, head: -4, legL: [18, -18, -6], legR: [-22, 22, 7], armL: [30, -50], armR: [-40, -38], w: 70 },
+      { lean: 4, head: -6, legL: [18, -18, -6], legR: [-24, 24, 7], armL: [10, -38], armR: [-14, -76], w: 86 },
+      { lean: -4, head: 6, legL: [20, -20, -7], legR: [-26, 26, 8], armL: [14, -44], armR: [-30, -70], w: 116 },
+      { lean: 5, head: -4, legL: [18, -18, -6], legR: [-22, 22, 7], armL: [12, -40], armR: [-18, -62], w: 90 },
     ],
     titan: [
-      { lean: 3, head: -4, legL: [10, -10, -6], legR: [-10, 10, 6], armL: [18, -40], armR: [-42, -30], w: 70 },
+      { lean: 3, head: -4, legL: [10, -10, -6], legR: [-10, 10, 6], armL: [10, -30], armR: [-8, -56], w: 0 },
       { lean: -2, head: 0, legL: [10, -10, -6], legR: [-10, 10, 6], armL: [24, -70], armR: [-24, 70], w: 0 },
-      { lean: -6, head: 6, legL: [12, -12, -6], legR: [-10, 10, 7], armL: [22, -42], armR: [-150, -12], w: 150 },
+      { lean: -5, head: 6, legL: [12, -12, -6], legR: [-10, 10, 7], armL: [12, -34], armR: [-18, -24], w: 28 },
     ],
     support: [
       { lean: 5, head: 12, legL: [10, -10, -4], legR: [-18, 18, 6], armL: [16, -34], armR: [-52, -34], w: 62 },
@@ -775,6 +775,7 @@
     let q;
     if (TAG === "leg") q = limbXF(p, sideOf(p), false);
     else if (TAG === "arm") q = limbXF(p, sideOf(p), true);
+    else if (TAG === "shoulder") { const sd = sideOf(p); q = torsoXF(rotAbout(p, mirrorJoint(RIG.sh, sd), POSE["arm" + sd][0] * 0.2)); }
     else if (TAG === "weapon") {
       const side = SIDE || "R";
       const hand = side === "R" ? RIG.hand : [72 - RIG.hand[0], RIG.hand[1]];
@@ -784,7 +785,7 @@
     return [q[0] + POSE_OX, q[1] + POSE_OY];
   }
   withSide = (pts, fn) => {
-    if (SIDE || (TAG !== "leg" && TAG !== "arm")) return fn();
+    if (SIDE || (TAG !== "leg" && TAG !== "arm" && TAG !== "shoulder")) return fn();
     SIDE = pts.reduce((a, p) => a + p[0], 0) / pts.length < 36 ? "L" : "R";
     try { return fn(); } finally { SIDE = null; }
   };
@@ -831,12 +832,13 @@
     prism(G, [[34, 20], [38, 20], [38, 22], [34, 22]], 0, "m1", { outline: false });
     prism(G, [[34, 11], [35, 4], [37, 4], [38, 11]], 1, "m1");
     prismPair(G, [[35, 12], [26, 4], [28, 3], [36, 9]], 1, "m3");
-    PT("arm");
+    PT("shoulder");
     // shoulders
     prismPair(G, [[7, 21], [22, 19], [25, 25], [23, 33], [9, 34], [6, 27]], 3, "m1");
     lineP(G, 8, 27, 23, 25, "m3", 3, true); lineP(G, 8, 28, 23, 26, "m3", 2, true);
     prismPair(G, [[8, 32], [23, 31], [22, 35], [9, 36]], 1, "m2");
     dotP(G, 11, 30, "e", 5, true); dotP(G, 12, 30, "e", 4, true);
+    PT("arm");
     // arms
     prismPair(G, [[13, 35], [21, 35], [20, 42], [14, 42]], 2, "f");
     prismPair(G, [[10, 41], [23, 41], [22, 53], [12, 53]], 3, "m1");
@@ -895,11 +897,12 @@
     lineP(G, 30, 18, 42, 18, "d", 0); lineP(G, 30, 19, 42, 19, "d", 0);
     [[31, 18], [32, 18], [31, 19], [32, 19], [39, 18], [40, 18], [39, 19], [40, 19]].forEach(([x, y]) => celDot(G, x, y, "e", y === 18 ? 5 : 4));
     prism(G, [[33, 21], [39, 21], [38, 25], [34, 25]], 1, "m2");
-    PT("arm");
+    PT("shoulder");
     // shoulders
     prismPair(G, [[0, 20], [20, 16], [24, 22], [22, 36], [3, 37], [0, 30]], 3, "m1");
     lineP(G, 1, 26, 23, 23, "m3", 3, true); lineP(G, 1, 27, 23, 24, "m3", 2, true);
     [[4, 21], [18, 19], [4, 33], [19, 32]].forEach(([x, y]) => dotP(G, x, y, "m1", 5, true));
+    PT("arm");
     // arms
     prismPair(G, [[6, 36], [15, 36], [15, 43], [7, 43]], 2, "f");
     prismPair(G, [[2, 42], [18, 42], [17, 58], [4, 58]], 3, "m1");
