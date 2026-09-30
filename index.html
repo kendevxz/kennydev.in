@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kenny — Player One</title>
+  <meta name="description" content="Kenny's arcade: a playable claw machine, a cartridge wall and a toy box full of pixel toys.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23120b2e'/><rect x='3' y='6' width='10' height='5' fill='%23ff3b6b'/><rect x='4' y='8' width='1' height='1' fill='%23fff'/><rect x='5' y='7' width='1' height='3' fill='%23fff'/><rect x='6' y='8' width='1' height='1' fill='%23fff'/><rect x='10' y='7' width='1' height='1' fill='%23ffd23f'/><rect x='11' y='9' width='1' height='1' fill='%233ee6ff'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="crt" aria-hidden="true"></div>
+
+  <header class="hud">
+    <div class="hud-stat"><span class="hud-label">1UP</span><span id="score" class="hud-value">000000</span></div>
+    <div class="hud-stat hide-sm"><span class="hud-label">HI-SCORE</span><span id="hiscore" class="hud-value">000000</span></div>
+    <nav class="hud-nav" aria-label="Stages">
+      <a href="#claw">1·CLAW</a>
+      <a href="#games">2·CARTS</a>
+      <a href="#toys">3·TOYS</a>
+    </nav>
+    <div class="hud-stat"><span class="hud-label">CREDITS</span><span id="credits" class="hud-value">05</span></div>
+    <button id="sound" class="hud-btn" aria-pressed="false" title="Toggle sound">♪ OFF</button>
+  </header>
+
+  <!-- ============ TITLE SCREEN ============ -->
+  <section class="hero" id="top">
+    <div class="sky" aria-hidden="true">
+      <div class="sun"></div>
+      <div id="floaters" class="floaters"></div>
+    </div>
+    <div class="grid-floor" aria-hidden="true"></div>
+
+    <div class="hero-inner">
+      <p class="eyebrow">© 2026 · ONE PLAYER · FREE PLAY</p>
+      <h1 class="title" aria-label="Kenny">
+        <span>K</span><span>E</span><span>N</span><span>N</span><span>Y</span>
+      </h1>
+      <p class="subtitle"><span id="typer"></span><span class="caret">_</span></p>
+      <a href="#claw" class="start-btn">▶ PRESS START</a>
+      <p class="hint">psst… UP UP DOWN DOWN LEFT RIGHT LEFT RIGHT B A</p>
+    </div>
+  </section>
+
+  <div class="ticker" aria-hidden="true">
+    <div class="ticker-track">
+      <span>★ NEW CHALLENGER APPROACHING</span><span>♥ EXTRA LIFE</span><span>◆ COMBO x99</span><span>▲ LEVEL UP</span><span>● WIND-UP TOYS</span><span>■ SAVE POINT</span><span>★ BOSS FIGHT AHEAD</span><span>♥ 1UP</span>
+      <span>★ NEW CHALLENGER APPROACHING</span><span>♥ EXTRA LIFE</span><span>◆ COMBO x99</span><span>▲ LEVEL UP</span><span>● WIND-UP TOYS</span><span>■ SAVE POINT</span><span>★ BOSS FIGHT AHEAD</span><span>♥ 1UP</span>
+    </div>
+  </div>
+
+  <!-- ============ STAGE 1: CLAW MACHINE ============ -->
+  <section class="stage" id="claw">
+    <header class="stage-head">
+      <span class="stage-num">STAGE 1</span>
+      <h2>The Claw</h2>
+      <p>Every toy in here is winnable. Probably. The claw is authentically rigged.</p>
+    </header>
+
+    <div class="claw-wrap">
+      <div class="cabinet">
+        <div class="marquee">
+          <span class="bulbs" aria-hidden="true"></span>
+          <strong>MEGA GRAB</strong>
+          <span class="bulbs" aria-hidden="true"></span>
+        </div>
+        <div class="glass">
+          <canvas id="clawCanvas" width="360" height="420" aria-label="Claw machine game. Use arrow keys to move, space to drop."></canvas>
+          <div id="clawMsg" class="claw-msg" role="status"></div>
+        </div>
+        <div class="panel">
+          <button class="pad" id="btnLeft" aria-label="Move left">◀</button>
+          <button class="pad drop" id="btnDrop" aria-label="Drop claw">DROP</button>
+          <button class="pad" id="btnRight" aria-label="Move right">▶</button>
+          <button class="coin" id="btnCoin" aria-label="Insert coin"><span>INSERT<br>COIN</span></button>
+        </div>
+        <p class="keys">ARROWS move · SPACE drop · C coin</p>
+      </div>
+
+      <aside class="prize-shelf">
+        <h3>Prize Shelf</h3>
+        <p class="muted" id="prizeEmpty">Nothing yet. The claw believes in you.</p>
+        <div id="prizes" class="prizes"></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============ STAGE 2: CARTRIDGE WALL ============ -->
+  <section class="stage alt" id="games">
+    <header class="stage-head">
+      <span class="stage-num">STAGE 2</span>
+      <h2>Cartridge Wall</h2>
+      <p>Pick a cart, blow on the contacts (optional, traditional), and boot it up.</p>
+    </header>
+
+    <div class="console-area">
+      <div class="tv">
+        <div class="tv-screen">
+          <div id="tvContent" class="tv-content">
+            <p class="tv-idle">NO SIGNAL<br><small>insert a cartridge</small></p>
+          </div>
+          <div class="tv-glare" aria-hidden="true"></div>
+        </div>
+        <div class="tv-knobs" aria-hidden="true"><i></i><i></i><span></span></div>
+      </div>
+      <div class="console" aria-hidden="true">
+        <div class="slot"><div id="slotCart" class="slot-cart"></div></div>
+        <div class="console-front"><i class="led" id="led"></i><b>POWER</b><b>RESET</b></div>
+      </div>
+    </div>
+
+    <div id="carts" class="carts"></div>
+  </section>
+
+  <!-- ============ STAGE 3: TOY BOX ============ -->
+  <section class="stage" id="toys">
+    <header class="stage-head">
+      <span class="stage-num">STAGE 3</span>
+      <h2>Toy Box</h2>
+      <p>Grab, toss, stack, fling. Nobody's tidying up.</p>
+    </header>
+
+    <div class="toybox-controls">
+      <button class="chip" id="btnShake">⤢ SHAKE</button>
+      <button class="chip" id="btnAdd">+ ADD TOY</button>
+      <button class="chip" id="btnGravity">⇅ ZERO-G</button>
+      <button class="chip" id="btnClear">⌫ CLEAN UP</button>
+    </div>
+    <div id="toybox" class="toybox">
+      <div class="toybox-label" aria-hidden="true">TOYS</div>
+    </div>
+  </section>
+
+  <!-- ============ GAME OVER ============ -->
+  <footer class="gameover" id="end">
+    <p class="continue">CONTINUE?</p>
+    <p id="countdown" class="countdown">9</p>
+    <a href="#top" class="start-btn small">↑ CONTINUE</a>
+    <div class="credits-roll">
+      <p>kennydev.in</p>
+      <p><a href="https://github.com/kendevxz" rel="noopener">github/kendevxz</a></p>
+      <p class="muted">Hand-drawn pixels · no quarters were harmed</p>
+    </div>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="confetti" class="confetti" aria-hidden="true"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
