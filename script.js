@@ -395,41 +395,10 @@
   const FANFARE = () => blip([523, 523, 523, 523, 415, 466, 523, 466, 523], 0.11);
 
   /* =========================================================
-     PLAYER — EXP, level, gil, toasts
+     TOASTS
      ========================================================= */
-  let exp = store.get("kd2-exp", 0);
-  let gil = store.get("kd2-gil", 0);
-  const levelFor = (x) => Math.min(99, Math.floor(Math.sqrt(x / 80)) + 1);
-  const expFor = (lv) => 80 * (lv - 1) ** 2;
-  let level = levelFor(exp);
-
   function bump(el) { el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }
-  function renderPlayer() {
-    $("lv").textContent = String(level).padStart(2, "0");
-    const lo = expFor(level), hi = expFor(level + 1);
-    $("expFill").style.width = level >= 99 ? "100%" : ((exp - lo) / (hi - lo)) * 100 + "%";
-    $("gil").textContent = gil.toLocaleString("en-US");
-  }
-  function addExp(n) {
-    exp += n;
-    store.set("kd2-exp", exp);
-    const nl = levelFor(exp);
-    if (nl > level) {
-      level = nl;
-      bump($("lv"));
-      toast(`LEVEL UP! KENNY reached LV ${level}`);
-      blip([392, 523, 659, 784, 1046], 0.07);
-    }
-    renderPlayer();
-  }
-  function addGil(n) {
-    gil += n;
-    store.set("kd2-gil", gil);
-    bump($("gil"));
-    renderPlayer();
-  }
-  renderPlayer();
-
+  void bump;
   const toastEl = $("toast");
   let toastTimer;
   function toast(msg) {
@@ -550,428 +519,449 @@
      MECHS — classes (each with its own colors and weapons)
      ========================================================= */
   const CLASS_INFO = {
-    titan: { code: "HV", stats: [8, 3, 6, 2], vehicle: "TANK", wmods: [[0, 0, 2, 0], [1, -1, 4, 0], [1, 0, 3, 0]] },
-    striker: { code: "AS", stats: [5, 6, 7, 3], vehicle: "FIGHTER JET", wmods: [[0, 0, 2, 0], [0, 1, 2, 0], [0, 0, 3, 0]] },
-    support: { code: "RP", stats: [3, 7, 2, 8], vehicle: "RESCUE HELI", wmods: [[0, 0, 0, 2], [3, -1, 0, 0], [0, 0, 2, 0]] },
+    titan: { code: "HV", stats: [8, 3, 6, 2], wmods: [[0, 0, 2, 0], [1, -1, 4, 0], [1, 0, 3, 0]] },
+    striker: { code: "AS", stats: [5, 6, 7, 3], wmods: [[0, 0, 2, 0], [0, 1, 2, 0], [0, 0, 3, 0]] },
+    support: { code: "RP", stats: [3, 7, 2, 8], wmods: [[0, 0, 0, 2], [3, -1, 0, 0], [0, 0, 2, 0]] },
   };
   const STAT_NAMES = ["ARMOR", "MOBILITY", "FIREPOWER", "SUPPORT"];
 
-  /* ---------- shaded pixel renderer: lit primitives → hue-shifted ramps → outline ---------- */
-  const MW = 80, MH = 72;
-  const LIGHT = (() => { const v = [-0.55, -0.7, 0.6]; const l = Math.hypot(...v); return v.map((c) => c / l); })();
-  const BAYER = [[0, 2], [3, 1]];
-
-  function hexToHsl(hex) {
+  /* ---------- cel-shaded sprites: flat masks, rim shading, coloured outlines ---------- */
+  function celHsl(hex) {
     const n = parseInt(hex.slice(1), 16);
     const r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
     const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
     let h = 0, s = 0;
-    if (mx !== mn) {
-      const d = mx - mn;
-      s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
-      h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
-      h *= 60;
-    }
+    if (mx !== mn) { const d = mx - mn; s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn); h = (mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60; }
     return [h, s, l];
   }
-  function hsl(h, s, l) {
+  function celHex(h, s, l) {
     h = ((h % 360) + 360) % 360; s = Math.max(0, Math.min(1, s)); l = Math.max(0, Math.min(1, l));
     const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = l - c / 2;
     const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
     return "#" + [r, g, b].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join("");
   }
-  // hue-shifted ramp: shadows lean cool, highlights lean warm
-  function ramp(hex) {
-    const [h, s, l] = hexToHsl(hex);
-    const toward = (target, amt) => { let d = ((target - h + 540) % 360) - 180; return h + d * amt; };
+  // 0 outline, 1 deep shadow, 2 shadow, 3 base, 4 light, 5 glint — shadows lean cool, lights lean warm
+  function celRamp(hex) {
+    const [h, s, l] = celHsl(hex);
+    const to = (t, a) => h + ((((t - h + 540) % 360) - 180) * a);
     return [
-      hsl(toward(245, 0.35), Math.min(1, s * 0.9 + 0.1), l * 0.24),
-      hsl(toward(245, 0.22), Math.min(1, s + 0.05), l * 0.5),
-      hsl(toward(245, 0.1), s, l * 0.75),
+      celHex(to(250, 0.3), Math.min(1, s * 0.8 + 0.15), Math.max(0.06, l * 0.22)),
+      celHex(to(250, 0.2), Math.min(1, s + 0.05), l * 0.55),
+      celHex(to(250, 0.1), s, l * 0.78),
       hex,
-      hsl(toward(55, 0.1), s * 0.95, l + (1 - l) * 0.35),
-      hsl(toward(55, 0.15), s * 0.7, l + (1 - l) * 0.72),
+      celHex(to(55, 0.12), s * 0.9, l + (1 - l) * 0.4),
+      celHex(to(55, 0.15), s * 0.6, l + (1 - l) * 0.78),
     ];
   }
-  function glow(hex) { return [hsl(hexToHsl(hex)[0], 0.8, 0.22), hex, hex, hex, hsl(hexToHsl(hex)[0], 0.9, 0.8), "#ffffff"]; }
+  const celGlow = (hex) => { const [h] = celHsl(hex); return [celHex(h, 0.8, 0.18), hex, hex, hex, celHex(h, 1, 0.82), "#ffffff"]; };
 
-  function materials(P) {
-    return {
-      m1: ramp(P.m1), m2: ramp(P.m2), m3: ramp(P.m3),
-      frame: ramp("#646a86"), dark: ramp("#34374c"), gun: ramp("#8a91a8"),
-      glass: ramp(P.glass || "#5ad1ff"),
-      skin: ramp(P.skin || "#e3a97c"), hair: ramp(P.hair || "#39304f"),
-      cloth: ramp(P.cloth || "#2f4f9e"), trim: ramp(P.trim || "#e8b93a"),
-      iris: glow(P.iris || "#6b4a2b"),
-      eye: glow(P.eye), beam: glow(P.beam || "#ff6bd6"),
-      fire: ["#b3261e", "#ff5a1f", "#ff8c1a", "#ffb020", "#ffe066", "#fff6c2"],
-      ink: ["#14111f", "#14111f", "#2a2438", "#3a3350", "#ffffff", "#ffffff"],
-    };
-  }
-
-  /* ---------- layers & primitives ---------- */
-  function layer(w = MW, h = MH) { return { w, h, px: Array.from({ length: h }, () => Array(w).fill(null)) }; }
-  const FLAT = new Set(["eye", "beam", "fire", "ink", "iris"]);
-  function put(L, x, y, mat, n) {
-    if (x < 0 || y < 0 || x >= L.w || y >= L.h) return;
-    if (FLAT.has(mat)) { L.px[y][x] = [mat, n === undefined ? 3 : n]; return; }
-    let I = Math.max(0, n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]);
-    I = I * 0.88 + 0.12 + (BAYER[y & 1][x & 1] - 1.5) * 0.03;
-    const t = n[2] > 0.5 && I > 0.97 ? 5 : I < 0.28 ? 1 : I < 0.5 ? 2 : I < 0.73 ? 3 : 4;
-    L.px[y][x] = [mat, t];
-  }
-  function ellipse(L, cx, cy, rx, ry, mat) {
-    for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
-      const nx = (x + 0.5 - cx) / rx, ny = (y + 0.5 - cy) / ry, d = nx * nx + ny * ny;
-      if (d <= 1) put(L, x, y, mat, [nx, ny, Math.sqrt(1 - d)]);
+  function celCanvas(w, h) { return { w, h, px: Array.from({ length: h }, () => Array(w).fill(null)) }; }
+  function celMask(G, polys) {
+    const m = Array.from({ length: G.h }, () => new Uint8Array(G.w));
+    for (const pts of polys) {
+      const ys = pts.map((p) => p[1]);
+      for (let y = Math.max(0, Math.floor(Math.min(...ys))); y <= Math.min(G.h - 1, Math.ceil(Math.max(...ys))); y++)
+        for (let x = 0; x < G.w; x++) {
+          const px = x + 0.5, py = y + 0.5;
+          let inside = false;
+          for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+            const [xi, yi] = pts[i], [xj, yj] = pts[j];
+            if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+          }
+          if (inside) m[y][x] = 1;
+        }
     }
+    return m;
   }
-  function capsule(L, x1, y1, x2, y2, r, mat) {
-    const dx = x2 - x1, dy = y2 - y1, len2 = dx * dx + dy * dy || 1;
-    for (let y = Math.floor(Math.min(y1, y2) - r); y <= Math.ceil(Math.max(y1, y2) + r); y++)
-      for (let x = Math.floor(Math.min(x1, x2) - r); x <= Math.ceil(Math.max(x1, x2) + r); x++) {
-        const px = x + 0.5, py = y + 0.5;
-        const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2));
-        const qx = (px - (x1 + t * dx)) / r, qy = (py - (y1 + t * dy)) / r, d = qx * qx + qy * qy;
-        if (d <= 1) put(L, x, y, mat, [qx, qy, Math.sqrt(1 - d)]);
+  const mirrorPts = (pts, W) => pts.map(([x, y]) => [W - x, y]);
+  // an ellipse as a polygon, handy for heads, joints, domes
+  function oval(cx, cy, rx, ry, n = 20) { return Array.from({ length: n }, (_, i) => [cx + rx * Math.cos((i / n) * 6.283), cy + ry * Math.sin((i / n) * 6.283)]); }
+
+  /* draw one part: fill, rim-shade, outline */
+  function celPart(G, polys, mat, o = {}) {
+    const all = o.sym ? polys.concat(polys.map((p) => mirrorPts(p, G.w))) : polys;
+    const m = celMask(G, all);
+    const at = (x, y) => y >= 0 && y < G.h && x >= 0 && x < G.w && m[y][x];
+    for (let y = 0; y < G.h; y++) for (let x = 0; x < G.w; x++) {
+      if (!m[y][x]) continue;
+      let t = 3;
+      if (!o.flat) {
+        if (!at(x, y - 1) || !at(x - 1, y)) t = 4;
+        else if (!at(x + 1, y) || !at(x, y + 1)) t = 1;
+        else if (!at(x + 2, y) || !at(x, y + 2)) t = 2;
       }
-  }
-  function poly(L, pts, mat, bev = 2.4, tilt = [0.12, -0.2]) {
-    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-    for (let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++)
-      for (let x = Math.floor(Math.min(...xs)); x <= Math.ceil(Math.max(...xs)); x++) {
-        const px = x + 0.5, py = y + 0.5;
-        let inside = false, best = Infinity, bn = [0, 0];
-        for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-          const [xi, yi] = pts[i], [xj, yj] = pts[j];
-          if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
-          const ex = xi - xj, ey = yi - yj, el2 = ex * ex + ey * ey || 1;
-          const t = Math.max(0, Math.min(1, ((px - xj) * ex + (py - yj) * ey) / el2));
-          const d = Math.hypot(px - (xj + t * ex), py - (yj + t * ey));
-          if (d < best) { best = d; bn = [px - (xj + t * ex), py - (yj + t * ey)]; }
-        }
-        if (!inside) continue;
-        let n = [tilt[0], tilt[1], Math.sqrt(1 - tilt[0] ** 2 - tilt[1] ** 2)];
-        if (best < bev) {
-          const k = (1 - best / bev) * 0.85, l = Math.hypot(bn[0], bn[1]) || 1;
-          const nx = n[0] * (1 - k) + (-bn[0] / l) * k, ny = n[1] * (1 - k) + (-bn[1] / l) * k;
-          n = [nx, ny, Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny))];
-        }
-        put(L, x, y, mat, n);
+      if (o.tone !== undefined) t = o.tone;
+      G.px[y][x] = [mat, t];
+    }
+    if (o.outline !== false) {
+      const add = [];
+      for (let y = 0; y < G.h; y++) for (let x = 0; x < G.w; x++) {
+        if (m[y][x]) continue;
+        if (at(x + 1, y) || at(x - 1, y) || at(x, y + 1) || at(x, y - 1)) add.push([x, y]);
       }
+      add.forEach(([x, y]) => (G.px[y][x] = [o.outlineMat || mat, 0]));
+    }
+    return m;
   }
-  const box = (L, x, y, w, h, mat, bev = 1.8) => poly(L, [[x, y], [x + w, y], [x + w, y + h], [x, y + h]], mat, bev);
-  function line(L, x1, y1, x2, y2, mat, tone) {
+  function celLine(G, x1, y1, x2, y2, mat, t, sym) {
     const n = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)) || 1;
     for (let i = 0; i <= n; i++) {
       const x = Math.round(x1 + ((x2 - x1) * i) / n), y = Math.round(y1 + ((y2 - y1) * i) / n);
-      if (x >= 0 && y >= 0 && x < L.w && y < L.h) L.px[y][x] = [mat, tone];
+      if (x >= 0 && y >= 0 && x < G.w && y < G.h) G.px[y][x] = [mat, t];
+      if (sym) { const mx = G.w - 1 - x; if (mx >= 0 && mx < G.w && y >= 0 && y < G.h) G.px[y][mx] = [mat, t]; }
     }
   }
-  function dot(L, x, y, mat, tone) { if (x >= 0 && y >= 0 && x < L.w && y < L.h) L.px[y][x] = [mat, tone]; }
-  function outlineLayer(L, skip = ["fire", "beam"]) {
-    const add = [];
-    for (let y = 0; y < L.h; y++) for (let x = 0; x < L.w; x++) {
-      if (L.px[y][x]) continue;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const c = L.px[y + dy] && L.px[y + dy][x + dx];
-        if (c && c[1] !== 0 && !skip.includes(c[0])) { add.push([x, y, c[0] === "iris" || c[0] === "ink" ? "hair" : c[0]]); break; }
-      }
-    }
-    add.forEach(([x, y, m]) => (L.px[y][x] = [m, 0]));
+  function celDot(G, x, y, mat, t, sym) {
+    if (x >= 0 && y >= 0 && x < G.w && y < G.h) G.px[y][x] = [mat, t];
+    if (sym) { const mx = G.w - 1 - x; if (G.px[y]) G.px[y][mx] = [mat, t]; }
   }
-  function part(fn, opts = {}) { const L = layer(opts.w, opts.h); fn(L); if (opts.outline !== false) outlineLayer(L); Object.assign(L, opts); return L; }
+  function celPaint(G, mats, scale) {
+    const c = document.createElement("canvas");
+    c.width = G.w * scale; c.height = G.h * scale;
+    const ctx = c.getContext("2d");
+    for (let y = 0; y < G.h; y++) for (let x = 0; x < G.w; x++) {
+      const p = G.px[y][x];
+      if (!p) continue;
+      ctx.fillStyle = mats[p[0]][p[1]];
+      ctx.fillRect(x * scale, y * scale, scale, scale);
+    }
+    return c;
+  }
 
   /* =========================================================
-     CLASSES — all face right
+     MECHS — front view, 64 x 72, symmetric bodies, class weapons
      ========================================================= */
-  const CLASSES = {
+  const MECH_W = 64, MECH_H = 72;
+  const MECH_CLASSES = {
     titan: {
       name: "TITAN", role: "HEAVY",
       paints: [
-        { name: "CRIMSON", m1: "#d8323c", m2: "#4b5066", m3: "#f2b632", eye: "#ffb020" },
-        { name: "MAGMA", m1: "#8f1d27", m2: "#2d2f3d", m3: "#ff7a1a", eye: "#ff5a1f" },
-        { name: "IRONCLAD", m1: "#7d8597", m2: "#3a3f52", m3: "#e63946", eye: "#ff3b3b" },
-        { name: "ROYAL", m1: "#b3182b", m2: "#e0c341", m3: "#f4f1e8", eye: "#7df9ff" },
+        { name: "CRIMSON", m1: "#d8323c", m2: "#50566e", m3: "#f2b632", eye: "#ffb020" },
+        { name: "MAGMA", m1: "#9a1f2a", m2: "#2f3242", m3: "#ff7a1a", eye: "#ff5a1f" },
+        { name: "IRONCLAD", m1: "#848da0", m2: "#3c4256", m3: "#e63946", eye: "#ff3b3b" },
+        { name: "ROYAL", m1: "#b81b30", m2: "#e0c341", m3: "#f4f1e8", eye: "#7df9ff" },
       ],
-      weapons: ["GATLING", "CANNON", "HAMMER"],
-      hand: [44, 47],
-      leg(L, o) {
-        ellipse(L, 34 + o, 47, 4.5, 4.5, "frame");
-        poly(L, [[28 + o, 47], [41 + o, 47], [40 + o, 55], [29 + o, 55]], "m2");
-        ellipse(L, 34 + o, 56, 4.8, 4.2, "m1");
-        poly(L, [[25 + o, 57], [43 + o, 57], [46 + o, 67], [23 + o, 67]], "m1", 2.6);
-        box(L, 27 + o, 60, 14, 2, "m3", 1);
-        poly(L, [[18 + o, 66], [48 + o, 66], [51 + o, 71], [16 + o, 71]], "m2", 1.8);
-      },
-      back(L) {
-        box(L, 14, 12, 8, 24, "frame", 2.2);
-        box(L, 22, 8, 7, 24, "frame", 2.2);
-        box(L, 13, 10, 10, 3, "dark", 1);
-        box(L, 21, 6, 9, 3, "dark", 1);
-      },
-      farArm(L) {
-        poly(L, [[46, 17], [62, 17], [64, 30], [47, 30]], "m1", 2.6);
-        capsule(L, 56, 30, 58, 40, 3.6, "frame");
-      },
-      body(L) {
-        poly(L, [[20, 22], [50, 19], [57, 29], [53, 45], [25, 47], [18, 35]], "m1", 3.2);
-        poly(L, [[27, 44], [49, 43], [47, 51], [29, 51]], "frame", 2);
-        for (let y = 27; y <= 37; y += 2) line(L, 42, y, 51, y - 1, "m2", 1);
-        ellipse(L, 46, 40, 2.6, 2.6, "eye");
-        box(L, 22, 36, 18, 3, "m3", 1.2);
-      },
-      head(L) {
-        poly(L, [[41, 13], [53, 12], [57, 17], [55, 23], [43, 23], [40, 18]], "m1", 2.2);
-        poly(L, [[43, 8], [41, 4], [46, 11]], "m2", 1);
-        box(L, 46, 15, 11, 3.5, "dark", 1);
-        line(L, 48, 16, 56, 16, "eye", 4); line(L, 48, 17, 56, 17, "eye", 2);
-        poly(L, [[47, 20], [56, 20], [54, 24], [48, 24]], "m2", 1.2);
-        line(L, 49, 22, 54, 22, "m2", 1);
-      },
-      arm(L) {
-        poly(L, [[13, 17], [35, 14], [40, 20], [38, 32], [16, 33], [11, 25]], "m1", 3.2);
-        poly(L, [[13, 25], [39, 22], [39, 26], [13, 29]], "m3", 1.2);
-        dot(L, 17, 20, "m2", 4); dot(L, 33, 18, "m2", 4);
-        capsule(L, 27, 32, 31, 40, 4.4, "frame");
-        poly(L, [[24, 38], [41, 38], [43, 49], [26, 49]], "m1", 2.6);
-        ellipse(L, 42, 47, 4.4, 4.2, "m2");
-      },
-      weapon(L, w, [ax, ay]) {
-        if (w === 0) {
-          ellipse(L, ax + 3, ay, 6, 7, "m2");
-          for (const o of [-3.2, 0, 3.2]) capsule(L, ax + 6, ay + o, ax + 32, ay + o, 1.7, "gun");
-          box(L, ax + 24, ay - 5.5, 3, 11, "m3", 1);
-          ellipse(L, ax + 3, ay, 2, 2, "m3");
-        } else if (w === 1) {
-          box(L, ax - 4, ay - 6, 18, 12, "m2", 2.4);
-          capsule(L, ax + 8, ay - 1, ax + 34, ay - 1, 4.6, "gun");
-          box(L, ax + 28, ay - 7, 7, 12, "dark", 1.4);
-          box(L, ax + 14, ay - 6.5, 3, 11, "m3", 1);
-        } else {
-          capsule(L, ax - 4, ay + 16, ax + 16, ay - 22, 1.8, "frame");
-          poly(L, [[ax + 4, ay - 36], [ax + 28, ay - 30], [ax + 25, ay - 14], [ax + 1, ay - 20]], "m2", 2.8);
-          poly(L, [[ax + 7, ay - 31], [ax + 24, ay - 27], [ax + 22, ay - 18], [ax + 5, ay - 22]], "m3", 1.6);
-          poly(L, [[ax + 27, ay - 29], [ax + 34, ay - 24], [ax + 26, ay - 17]], "gun", 1.2);
-        }
-      },
-      thrusters: [[17, 37], [25, 33]],
+      weapons: ["GATLING", "TWIN CANNONS", "HAMMER"],
     },
-
     striker: {
       name: "STRIKER", role: "ASSAULT",
       paints: [
         { name: "AZURE", m1: "#2f6fe0", m2: "#eef2fb", m3: "#ffd23f", eye: "#7dff9b", beam: "#ff6bd6" },
-        { name: "MIDNIGHT", m1: "#233478", m2: "#7b8ac4", m3: "#3ee6ff", eye: "#3ee6ff", beam: "#3ee6ff" },
+        { name: "MIDNIGHT", m1: "#27397f", m2: "#8b99cf", m3: "#3ee6ff", eye: "#3ee6ff", beam: "#3ee6ff" },
         { name: "FROST", m1: "#8fb8ff", m2: "#f7f9ff", m3: "#3a6fe0", eye: "#ffd23f", beam: "#7df9ff" },
         { name: "VIOLET", m1: "#5b40d4", m2: "#ebe5ff", m3: "#ff5fa2", eye: "#ff5fa2", beam: "#c08bff" },
       ],
       weapons: ["BEAM RIFLE", "BEAM SABER", "BEAM LANCE"],
-      hand: [40, 37],
-      leg(L, o) {
-        poly(L, [[31 + o, 42], [40 + o, 42], [39 + o, 51], [32 + o, 51]], "frame", 1.6);
-        poly(L, [[29 + o, 49], [40 + o, 49], [42 + o, 54], [33 + o, 57], [28 + o, 54]], "m2", 1.8);
-        poly(L, [[40 + o, 49], [45 + o, 51], [41 + o, 53]], "m2", 1);
-        poly(L, [[29 + o, 56], [41 + o, 56], [43 + o, 66], [31 + o, 66]], "m1", 2.2);
-        line(L, 35 + o, 58, 36 + o, 64, "m2", 3);
-        poly(L, [[27 + o, 65], [45 + o, 65], [49 + o, 71], [25 + o, 71]], "m2", 1.6);
-        box(L, 25 + o, 69, 6, 2, "m3", 0.8);
-      },
-      back(L) {
-        poly(L, [[25, 22], [3, 4], [7, 2], [29, 17]], "m2", 1.8);
-        poly(L, [[3, 4], [7, 2], [10, 5], [6, 7]], "m3", 0.8);
-        poly(L, [[23, 26], [1, 18], [3, 14], [27, 22]], "m1", 1.8);
-        capsule(L, 21, 26, 17, 35, 3.2, "frame");
-      },
-      farArm(L) {
-        poly(L, [[42, 17], [53, 17], [55, 25], [43, 26]], "m2", 2);
-        capsule(L, 50, 25, 52, 33, 2.8, "frame");
-      },
-      body(L) {
-        poly(L, [[29, 34], [43, 34], [42, 41], [30, 41]], "frame", 1.6);
-        poly(L, [[24, 20], [46, 18], [51, 26], [47, 35], [28, 37], [22, 28]], "m1", 3);
-        poly(L, [[30, 17], [44, 16], [47, 21], [31, 22]], "m2", 1.6);
-        box(L, 40, 23, 7, 4, "m3", 1);
-        line(L, 41, 24, 46, 24, "m3", 1); line(L, 41, 26, 46, 26, "m3", 1);
-        poly(L, [[26, 38], [37, 38], [36, 47], [27, 45]], "m2", 1.6);
-        poly(L, [[36, 38], [44, 38], [43, 44], [37, 46]], "m3", 1.2);
-      },
-      head(L) {
-        poly(L, [[39, 8], [49, 7], [53, 12], [51, 18], [41, 18], [38, 12]], "m2", 2);
-        poly(L, [[44, 8], [34, 0], [37, 0], [46, 6]], "m3", 0.9);
-        poly(L, [[46, 7], [55, 0], [57, 2], [48, 8]], "m3", 0.9);
-        poly(L, [[45, 5], [48, 5], [47, 9]], "m1", 0.6);
-        box(L, 45, 10.5, 7.5, 3, "dark", 0.8);
-        line(L, 46, 11, 48, 12, "eye", 4); line(L, 50, 12, 52, 11, "eye", 4);
-        poly(L, [[46, 14], [52, 14], [51, 18.5], [47, 18.5]], "m2", 1);
-        line(L, 48, 15, 48, 17, "m2", 1); line(L, 50, 15, 50, 17, "m2", 1);
-        box(L, 47, 18, 4, 1.6, "m1", 0.6);
-      },
-      arm(L) {
-        poly(L, [[17, 16], [33, 15], [36, 23], [21, 26], [15, 21]], "m2", 2.4);
-        poly(L, [[17, 20], [35, 19], [35, 21], [17, 23]], "m1", 1);
-        capsule(L, 27, 25, 30, 32, 3, "frame");
-        poly(L, [[25, 31], [38, 31], [39, 39], [27, 39]], "m1", 2);
-        ellipse(L, 40, 37, 3, 3, "frame");
-      },
-      weapon(L, w, [ax, ay]) {
-        if (w === 0) {
-          poly(L, [[ax - 6, ay - 4], [ax + 26, ay - 3], [ax + 26, ay + 2], [ax - 6, ay + 3]], "gun", 1.6);
-          capsule(L, ax + 24, ay - 1, ax + 38, ay - 1, 1.4, "gun");
-          box(L, ax + 6, ay - 8, 10, 4, "m2", 1);
-          dot(L, ax + 14, ay - 7, "eye", 4);
-          box(L, ax - 2, ay + 2, 3, 5, "gun", 0.8);
-          box(L, ax + 16, ay - 4, 2, 6, "m3", 0.6);
-        } else if (w === 1) {
-          capsule(L, ax - 1, ay + 2, ax + 5, ay - 3, 1.8, "frame");
-          for (let i = 0; i < 30; i++) {
-            const x = Math.round(ax + 5 + i * 0.75), y = Math.round(ay - 3 - i * 0.66);
-            for (let k = -2; k <= 2; k++) dot(L, x, y + k, "beam", Math.abs(k) === 2 ? 1 : Math.abs(k) === 1 ? 3 : 5);
-          }
-        } else {
-          capsule(L, ax - 14, ay + 14, ax + 26, ay - 20, 1.3, "frame");
-          poly(L, [[ax + 20, ay - 18], [ax + 26, ay - 24], [ax + 24, ay - 14]], "m3", 0.8);
-          for (let i = 0; i < 12; i++) {
-            const x = Math.round(ax + 26 + i * 0.75), y = Math.round(ay - 21 - i * 0.66), wdt = i < 8 ? 2 : 1;
-            for (let k = -wdt; k <= wdt; k++) dot(L, x, y + k, "beam", Math.abs(k) === wdt ? 2 : 5);
-          }
-        }
-      },
-      thrusters: [[18, 37]],
     },
-
     support: {
       name: "SUPPORT", role: "REPAIR",
       paints: [
-        { name: "AMBER", m1: "#f2c12e", m2: "#4a4e63", m3: "#262838", eye: "#6bff8a", beam: "#9dff6b" },
-        { name: "HAZARD", m1: "#ffd21f", m2: "#22242f", m3: "#ff7b00", eye: "#ff4d4d", beam: "#ffb020" },
-        { name: "CITRUS", m1: "#c9e04a", m2: "#3f5a2d", m3: "#f4f1e8", eye: "#3ee6ff", beam: "#3ee6ff" },
-        { name: "DESERT", m1: "#e2b36f", m2: "#76593a", m3: "#2f6fe0", eye: "#7df9ff", beam: "#7df9ff" },
+        { name: "AMBER", m1: "#f2c12e", m2: "#4e5268", m3: "#2a2c3c", eye: "#6bff8a", beam: "#9dff6b" },
+        { name: "HAZARD", m1: "#ffd21f", m2: "#262833", m3: "#ff7b00", eye: "#ff4d4d", beam: "#ffb020" },
+        { name: "CITRUS", m1: "#c9e04a", m2: "#43603a", m3: "#f4f1e8", eye: "#3ee6ff", beam: "#3ee6ff" },
+        { name: "DESERT", m1: "#e2b36f", m2: "#7a5c3c", m3: "#2f6fe0", eye: "#7df9ff", beam: "#7df9ff" },
       ],
       weapons: ["REPAIR ARM", "SHIELD", "FLARE GUN"],
-      hand: [41, 39],
-      leg(L, o) {
-        ellipse(L, 36 + o, 45, 3.2, 3.2, "frame");
-        capsule(L, 36 + o, 45, 33 + o, 54, 2.3, "frame");
-        ellipse(L, 33 + o, 55, 3.4, 3.4, "m1");
-        capsule(L, 33 + o, 56, 36 + o, 64, 3, "m1");
-        poly(L, [[27 + o, 64], [45 + o, 64], [48 + o, 71], [25 + o, 71]], "m2", 1.6);
-        for (let x = 28; x < 46; x += 4) line(L, x + o, 70, x + 2 + o, 65, "m1", 3);
-      },
-      back(L) {
-        box(L, 16, 20, 11, 17, "m2", 2);
-        capsule(L, 22, 21, 36, 5, 2, "m1");
-        ellipse(L, 22, 21, 2.8, 2.8, "frame");
-        ellipse(L, 36, 5, 2.4, 2.4, "frame");
-        poly(L, [[36, 5], [44, 6], [45, 10], [42, 9], [41, 12], [38, 9]], "gun", 0.9);
-        ellipse(L, 12, 17, 3, 7.5, "frame");
-        ellipse(L, 12.6, 17, 1.4, 3.4, "m3");
-        dot(L, 12, 17, "eye", 5);
-      },
-      farArm(L) {
-        ellipse(L, 44, 25, 4.2, 4.2, "m2");
-        capsule(L, 45, 28, 47, 35, 2.2, "frame");
-      },
-      body(L) {
-        ellipse(L, 34, 31, 11.5, 10.5, "m1");
-        poly(L, [[24, 35], [45, 35], [43, 40], [26, 40]], "m3", 1);
-        for (let x = 25; x < 44; x += 4) line(L, x, 40, x + 3, 35, "m1", 3);
-        ellipse(L, 40, 27, 3.2, 3.2, "glass");
-        poly(L, [[29, 40], [40, 40], [39, 45], [30, 45]], "frame", 1.2);
-      },
-      head(L) {
-        ellipse(L, 40, 16, 7.5, 6.5, "m1");
-        box(L, 36, 15, 12.5, 4, "dark", 0.8);
-        ellipse(L, 45, 17, 2.4, 2.4, "eye");
-        dot(L, 44, 16, "eye", 5);
-        line(L, 38, 10, 35, 2, "frame", 2);
-        ellipse(L, 35, 2, 1.6, 1.6, "m3");
-        ellipse(L, 34, 17, 2.2, 3.8, "m2");
-      },
-      arm(L) {
-        ellipse(L, 29, 26, 5.2, 5, "m2");
-        line(L, 25, 26, 33, 26, "m1", 3);
-        capsule(L, 30, 30, 33, 37, 2.2, "frame");
-        capsule(L, 33, 38, 39, 38, 2.8, "m1");
-        ellipse(L, 41, 39, 2.6, 2.6, "frame");
-      },
-      weapon(L, w, [ax, ay]) {
-        if (w === 0) {
-          capsule(L, ax, ay, ax + 12, ay - 5, 2, "frame");
-          poly(L, [[ax + 10, ay - 11], [ax + 19, ay - 10], [ax + 19, ay - 6], [ax + 15, ay - 7], [ax + 15, ay - 3], [ax + 19, ay - 2], [ax + 19, ay + 2], [ax + 10, ay + 1]], "m1", 1.2);
-          dot(L, ax + 21, ay - 4, "beam", 5); dot(L, ax + 22, ay - 6, "beam", 3); dot(L, ax + 22, ay - 2, "beam", 3);
-        } else if (w === 1) {
-          poly(L, [[ax - 2, ay - 16], [ax + 13, ay - 18], [ax + 15, ay + 2], [ax + 7, ay + 12], [ax - 1, ay + 7]], "m2", 2.6);
-          poly(L, [[ax + 1, ay - 13], [ax + 11, ay - 14], [ax + 12, ay + 1], [ax + 6, ay + 8], [ax + 1, ay + 4]], "m1", 1.8);
-          box(L, ax + 5, ay - 9, 2.5, 11, "m3", 0.6); box(L, ax + 2, ay - 5, 9, 2.5, "m3", 0.6);
-        } else {
-          capsule(L, ax - 2, ay - 1, ax + 22, ay - 5, 3.2, "m2");
-          ellipse(L, ax + 22.5, ay - 5, 1.6, 3, "dark");
-          box(L, ax + 8, ay - 7, 3, 7, "m1", 0.8);
-          capsule(L, ax + 3, ay + 1, ax + 3, ay + 7, 1.4, "gun");
-        }
-      },
-      thrusters: [[21, 38]],
     },
   };
-  const CLASS_KEYS = ["titan", "striker", "support"];
-  const HOSTILE = { name: "HOSTILE", m1: "#8d929e", m2: "#5b1f2e", m3: "#ff3b3b", eye: "#ff3b3b", beam: "#ff3b3b" };
+  const MECH_KEYS = ["titan", "striker", "support"];
+  const HOSTILE_PAINT = { name: "HOSTILE", m1: "#8d929e", m2: "#5b1f2e", m3: "#ff3b3b", eye: "#ff3b3b", beam: "#ff3b3b" };
 
-  function mechParts(cls, w) {
-    const d = CLASSES[cls];
-    const P = [];
-    P.push(part((L) => d.leg(L, 8), { dim: 1 }));
-    P.push(part((L) => d.farArm(L), { dim: 1 }));
-    P.push(part((L) => d.back(L)));
-    P.push(part((L) => d.body(L)));
-    P.push(part((L) => d.leg(L, 0)));
-    P.push(part((L) => d.head(L)));
-    if (!(cls === "titan" && w === 2)) {
-      P.push(part((L) => d.arm(L)));
-      P.push(part((L) => d.weapon(L, w, d.hand)));
+  function mechMats(P) {
+    return {
+      m1: celRamp(P.m1), m2: celRamp(P.m2), m3: celRamp(P.m3),
+      f: celRamp("#5d6380"), d: celRamp("#2c2f42"), g: celRamp("#8a91a8"),
+      glass: celRamp("#5ad1ff"), e: celGlow(P.eye), b: celGlow(P.beam || P.eye),
+    };
+  }
+
+  function drawStriker(G, w) {
+    // wing binders behind
+    celPart(G, [[[21, 22], [5, 5], [9, 3], [25, 17]], [[19, 28], [3, 24], [4, 19], [22, 23]]], "m1", { sym: true });
+    celPart(G, [[[5, 5], [9, 3], [11, 6], [7, 8]]], "m3", { sym: true, outline: false });
+    // legs
+    celPart(G, [[[24, 41], [31, 41], [31, 50], [25, 50]]], "f", { sym: true });
+    celPart(G, [[[21, 55], [31, 55], [31, 65], [21, 65]]], "m1", { sym: true });
+    celLine(G, 26, 57, 26, 63, "m1", 2, true);
+    celPart(G, [[[21, 49], [31, 49], [31, 55], [24, 57], [20, 53]]], "m2", { sym: true });
+    celPart(G, [[[16, 64], [31, 64], [31, 70], [13, 70]]], "m2", { sym: true });
+    celPart(G, [[[13, 68], [19, 68], [19, 70], [13, 70]]], "m3", { sym: true, outline: false });
+    // waist + skirt
+    celPart(G, [[[24, 37], [32, 37], [32, 43], [25, 43]]], "f", { sym: true });
+    celPart(G, [[[18, 38], [26, 38], [25, 48], [19, 46]]], "m2", { sym: true });
+    celPart(G, [[[28, 39], [36, 39], [35, 47], [29, 47]]], "m3");
+    // torso
+    celPart(G, [[[18, 20], [32, 20], [32, 38], [23, 38], [19, 31]]], "m1", { sym: true });
+    celPart(G, [[[23, 16], [32, 16], [32, 21], [22, 21]]], "m2", { sym: true });
+    celPart(G, [[[23, 24], [30, 24], [30, 30], [24, 30]]], "m3", { sym: true });
+    celLine(G, 24, 26, 29, 26, "m3", 1, true); celLine(G, 24, 28, 29, 28, "m3", 1, true);
+    celPart(G, [[[24, 32], [32, 32], [32, 38], [25, 38]]], "m2", { sym: true });
+    celLine(G, 31, 33, 31, 37, "m2", 1); celLine(G, 32, 33, 32, 37, "m2", 1);
+    // shoulders
+    celPart(G, [[[7, 16], [20, 15], [22, 26], [10, 27], [6, 22]]], "m2", { sym: true });
+    celPart(G, [[[7, 21], [21, 20], [21, 23], [7, 24]]], "m1", { sym: true, outline: false });
+    // arms
+    celPart(G, [[[12, 27], [18, 27], [18, 34], [13, 34]]], "f", { sym: true });
+    celPart(G, [[[10, 33], [19, 33], [19, 44], [11, 44]]], "m1", { sym: true });
+    celPart(G, [[[11, 44], [18, 44], [18, 49], [12, 49]]], "f", { sym: true });
+    // head
+    celPart(G, [[[26, 8], [32, 7], [32, 17], [27, 17], [25, 12]]], "m2", { sym: true });
+    celPart(G, [[[30, 9], [21, 1], [23, 0], [32, 6]]], "m3", { sym: true });
+    celPart(G, [[[30, 4], [34, 4], [33, 9], [31, 9]]], "m1", { outline: false });
+    celLine(G, 27, 11, 30, 12, "d", 0, true); celLine(G, 27, 12, 30, 13, "e", 4, true);
+    celLine(G, 30, 14, 30, 16, "m2", 1, true);
+    celPart(G, [[[30, 16], [34, 16], [34, 18], [30, 18]]], "m3", { outline: false });
+    // weapon in the right hand (viewer's right)
+    if (w === 0) {
+      celPart(G, [[[46, 36], [53, 36], [54, 60], [49, 60]]], "g");
+      celPart(G, [[[50, 60], [53, 60], [53, 70], [51, 70]]], "g");
+      celPart(G, [[[53, 40], [57, 40], [57, 48], [53, 48]]], "m2");
+      celDot(G, 55, 42, "e", 4);
+    } else if (w === 1) {
+      celPart(G, [[[47, 44], [51, 44], [51, 52], [47, 52]]], "f");
+      for (let i = 0; i < 34; i++) { const x = Math.round(50 + i * 0.28), y = 44 - i; celDot(G, x - 1, y, "b", 2); celDot(G, x, y, "b", 5); celDot(G, x + 1, y, "b", 2); }
     } else {
-      P.push(part((L) => d.weapon(L, w, d.hand)));
-      P.push(part((L) => d.arm(L)));
+      celPart(G, [[[51, 6], [54, 6], [54, 71], [51, 71]]], "f");
+      celPart(G, [[[49, 8], [56, 8], [56, 11], [49, 11]]], "m3");
+      for (let i = 0; i < 9; i++) { const half = Math.max(0, 2 - Math.floor(i / 3)); for (let k = -half; k <= half; k++) celDot(G, 52 + k + 1, 7 - i, "b", k === 0 ? 5 : 2); }
     }
-    P.push(part((L) => {
-      d.thrusters.forEach(([x, y]) => {
-        for (let i = 0; i < 8; i++) for (let k = -2; k <= 2; k++) {
-          if (Math.abs(k) > 2 - i / 4) continue;
-          dot(L, x + k, y + i, "fire", i < 2 ? 5 : i < 4 ? 4 : i < 6 ? 2 : 1);
-        }
-      });
-    }, { outline: false, flame: true }));
-    return P;
   }
 
-  function vehicleParts(cls) {
-    const P = [];
-    if (cls === "titan") { // heavy tank
-      P.push(part((L) => { capsule(L, 10, 60, 66, 60, 8, "dark"); for (let x = 13; x <= 63; x += 10) ellipse(L, x, 60, 4, 4, "frame"); for (let x = 8; x < 70; x += 3) dot(L, x, 52, "frame", 4); }));
-      P.push(part((L) => { poly(L, [[6, 42], [66, 42], [74, 52], [4, 53]], "m1", 2.6); box(L, 8, 47, 58, 3, "m3", 1); }));
-      P.push(part((L) => { poly(L, [[22, 30], [48, 28], [54, 36], [52, 43], [20, 43]], "m1", 3); box(L, 26, 31, 8, 4, "m2", 1); dot(L, 44, 33, "eye", 4); dot(L, 45, 33, "eye", 3); }));
-      P.push(part((L) => { capsule(L, 48, 34, 79, 33, 2.8, "gun"); box(L, 66, 30, 5, 7, "m2", 1); box(L, 76, 30, 4, 7, "dark", 0.8); }));
-      P.push(part((L) => { capsule(L, 24, 28, 34, 22, 1.6, "gun"); box(L, 30, 25, 6, 4, "m2", 1); }));
-      P.push(part((L) => { for (let i = 0; i < 4; i++) for (let k = -1; k <= 1; k++) dot(L, 3 - i, 46 + k, "fire", 4 - i); }, { outline: false, flame: true }));
-    } else if (cls === "striker") { // jet fighter
-      P.push(part((L) => { poly(L, [[8, 34], [22, 34], [14, 14], [6, 14]], "m1", 1.8); poly(L, [[6, 14], [14, 14], [15, 18], [7, 18]], "m3", 0.8); }, { dim: 1 }));
-      P.push(part((L) => { poly(L, [[26, 40], [52, 40], [36, 64], [16, 64]], "m1", 2.2); poly(L, [[16, 61], [26, 61], [25, 64], [16, 64]], "m3", 0.8); }));
-      P.push(part((L) => { capsule(L, 8, 38, 64, 38, 6.4, "m2"); line(L, 12, 41, 60, 41, "m1", 2); poly(L, [[18, 35], [42, 34], [42, 36], [18, 37]], "m1", 1); }));
-      P.push(part((L) => { poly(L, [[62, 33], [79, 38], [62, 43]], "m1", 1.8); }));
-      P.push(part((L) => { ellipse(L, 50, 33.5, 9, 3.6, "glass"); }));
-      P.push(part((L) => { poly(L, [[10, 36], [24, 36], [16, 18], [9, 18]], "m1", 1.8); poly(L, [[9, 18], [16, 18], [17, 22], [10, 22]], "m3", 0.8); capsule(L, 4, 38, 11, 38, 5, "frame"); }));
-      P.push(part((L) => { for (let i = 0; i < 7; i++) for (let k = -2; k <= 2; k++) if (Math.abs(k) <= 2 - i / 3.5) dot(L, 5 - i, 38 + k, "fire", i < 2 ? 5 : i < 4 ? 3 : 1); }, { outline: false, flame: true }));
-    } else { // rescue helicopter
-      P.push(part((L) => { capsule(L, 6, 34, 34, 38, 2.4, "m1"); poly(L, [[2, 26], [8, 26], [9, 36], [4, 36]], "m2", 1.2); }));
-      P.push(part((L) => { ellipse(L, 5, 28, 1.3, 6, "frame"); }, { rotorV: true }));
-      P.push(part((L) => { capsule(L, 34, 60, 66, 60, 1.3, "frame"); line(L, 42, 52, 40, 59, "frame", 2); line(L, 58, 52, 60, 59, "frame", 2); }));
-      P.push(part((L) => { poly(L, [[30, 32], [56, 30], [70, 38], [68, 50], [58, 54], [34, 54], [28, 44]], "m1", 3.4); poly(L, [[32, 46], [66, 46], [64, 50], [34, 50]], "m3", 1); for (let x = 34; x < 64; x += 5) line(L, x, 50, x + 3, 46, "m1", 3); }));
-      P.push(part((L) => { poly(L, [[56, 32], [66, 34], [71, 42], [58, 42]], "glass", 1.8); box(L, 40, 36, 8, 7, "glass", 1); }));
-      P.push(part((L) => { box(L, 44, 24, 10, 6, "m2", 1.4); capsule(L, 49, 22, 49, 26, 1.3, "frame"); }));
-      P.push(part((L) => { capsule(L, 18, 20, 80, 20, 1, "dark"); }, { rotor: true }));
+  function drawTitan(G, w) {
+    // exhaust stacks behind the shoulders
+    celPart(G, [[[9, 3], [16, 3], [16, 15], [9, 15]]], "f", { sym: true });
+    celPart(G, [[[9, 2], [16, 2], [16, 5], [9, 5]]], "d", { sym: true, outline: false });
+    if (w === 1) {
+      celPart(G, [[[4, 1], [10, 1], [10, 16], [4, 16]]], "g", { sym: true });
+      celPart(G, [[[4, 1], [10, 1], [10, 3], [4, 3]]], "d", { sym: true, outline: false });
+      celPart(G, [[[3, 9], [11, 9], [11, 11], [3, 11]]], "m3", { sym: true, outline: false });
     }
-    return P;
+    // legs
+    celPart(G, [[[21, 45], [31, 45], [31, 52], [22, 52]]], "f", { sym: true });
+    celPart(G, [[[17, 56], [31, 56], [31, 65], [16, 65]]], "m1", { sym: true });
+    celPart(G, [[[17, 59], [31, 59], [31, 61], [17, 61]]], "m3", { sym: true, outline: false });
+    celPart(G, [[[18, 51], [31, 51], [31, 57], [18, 57]]], "m2", { sym: true });
+    celPart(G, [[[11, 64], [31, 64], [31, 70], [9, 70]]], "m2", { sym: true });
+    // waist
+    celPart(G, [[[21, 41], [32, 41], [32, 47], [22, 47]]], "f", { sym: true });
+    // torso
+    celPart(G, [[[14, 18], [32, 17], [32, 42], [18, 42], [13, 30]]], "m1", { sym: true });
+    celPart(G, [[[25, 21], [32, 21], [32, 32], [25, 32]]], "m2", { sym: true });
+    for (let y = 23; y <= 30; y += 2) celLine(G, 26, y, 31, y, "m2", 1, true);
+    celPart(G, [[[18, 37], [32, 37], [32, 40], [18, 40]]], "m3", { sym: true, outline: false });
+    celDot(G, 31, 34, "e", 4, true); celDot(G, 31, 35, "e", 3, true);
+    // shoulders
+    celPart(G, [[[1, 14], [14, 11], [20, 16], [20, 29], [3, 30], [0, 22]]], "m1", { sym: true });
+    celPart(G, [[[1, 21], [20, 20], [20, 23], [1, 25]]], "m3", { sym: true, outline: false });
+    celDot(G, 5, 16, "m2", 4, true); celDot(G, 16, 15, "m2", 4, true);
+    // arms
+    celPart(G, [[[6, 30], [14, 30], [14, 36], [7, 36]]], "f", { sym: true });
+    celPart(G, [[[3, 35], [16, 35], [16, 47], [4, 47]]], "m1", { sym: true });
+    celPart(G, [[[4, 47], [15, 47], [15, 53], [5, 53]]], "m2", { sym: true });
+    // head, sunk between the shoulders
+    celPart(G, [[[26, 10], [32, 9], [32, 19], [27, 19], [25, 14]]], "m1", { sym: true });
+    celPart(G, [[[26, 13], [32, 13], [32, 16], [26, 16]]], "d", { sym: true, outline: false });
+    celLine(G, 27, 14, 31, 14, "e", 4, true);
+    celPart(G, [[[28, 17], [32, 17], [32, 20], [28, 20]]], "m2", { sym: true, outline: false });
+    if (w === 0) {
+      celPart(G, [[[49, 50], [58, 50], [58, 56], [49, 56]]], "m2");
+      for (const x of [50, 53, 56]) celPart(G, [[[x, 56], [x + 2, 56], [x + 2, 70], [x, 70]]], "g");
+      celPart(G, [[[49, 64], [59, 64], [59, 66], [49, 66]]], "m3", { outline: false });
+    } else if (w === 2) {
+      celPart(G, [[[53, 16], [56, 16], [56, 60], [53, 60]]], "f");
+      celPart(G, [[[45, 4], [63, 4], [63, 18], [45, 18]]], "m2");
+      celPart(G, [[[47, 6], [61, 6], [61, 16], [47, 16]]], "m3", { outline: false });
+    }
   }
+
+  function drawSupport(G, w) {
+    // back: radar dish (left) and crane arm (right)
+    celPart(G, [oval(10, 12, 4, 8)], "f");
+    celPart(G, [oval(10.5, 12, 1.6, 4)], "m3", { outline: false });
+    celDot(G, 10, 12, "e", 5);
+    celPart(G, [[[40, 18], [44, 18], [54, 2], [51, 0]]], "m1");
+    celPart(G, [[[50, 0], [58, 0], [58, 5], [55, 5], [55, 8], [52, 8], [52, 5], [50, 5]]], "g");
+    // legs
+    celPart(G, [[[26, 43], [31, 43], [31, 51], [27, 51]]], "f", { sym: true });
+    celPart(G, [[[25, 56], [31, 56], [31, 64], [25, 64]]], "m1", { sym: true });
+    celPart(G, [oval(28, 53, 4, 3.5)], "m1", { sym: true });
+    celPart(G, [[[19, 63], [31, 63], [31, 70], [17, 70]]], "m2", { sym: true });
+    for (let x = 19; x < 31; x += 3) celLine(G, x, 69, x + 2, 65, "m1", 3, true);
+    // waist
+    celPart(G, [[[26, 38], [32, 38], [32, 44], [26, 44]]], "f", { sym: true });
+    // torso
+    celPart(G, [[[20, 20], [32, 19], [32, 39], [24, 39], [20, 33]]], "m1", { sym: true });
+    celPart(G, [[[21, 32], [32, 32], [32, 36], [22, 36]]], "m3", { sym: true, outline: false });
+    for (let x = 21; x < 32; x += 3) celLine(G, x, 36, x + 3, 32, "m1", 3, true);
+    celPart(G, [[[29, 23], [35, 23], [35, 29], [29, 29]]], "glass");
+    // shoulders + arms
+    celPart(G, [oval(18, 22, 5, 4.5)], "m2", { sym: true });
+    celPart(G, [[[15, 26], [19, 26], [19, 34], [15, 34]]], "f", { sym: true });
+    celPart(G, [[[14, 33], [20, 33], [20, 43], [14, 43]]], "m1", { sym: true });
+    celPart(G, [[[15, 43], [19, 43], [19, 47], [15, 47]]], "f", { sym: true });
+    // head: dome, visor, mono-eye, antenna
+    celPart(G, [oval(32, 12, 7, 6.5)], "m1");
+    celPart(G, [[[25, 11], [39, 11], [39, 15], [25, 15]]], "d", { outline: false });
+    celPart(G, [oval(32, 13, 2, 2)], "e", { outline: false, flat: true, tone: 3 });
+    celDot(G, 31, 12, "e", 5);
+    celLine(G, 36, 6, 40, 0, "f", 2); celDot(G, 40, 0, "m3", 4); celDot(G, 41, 0, "m3", 3);
+    if (w === 0) {
+      celPart(G, [[[45, 46], [49, 46], [49, 58], [45, 58]]], "f");
+      celPart(G, [[[42, 57], [52, 57], [52, 60], [49, 60], [49, 63], [52, 63], [52, 66], [42, 66]]], "m1");
+      celDot(G, 53, 61, "b", 5); celDot(G, 54, 59, "b", 3); celDot(G, 54, 63, "b", 3);
+    } else if (w === 1) {
+      celPart(G, [[[1, 28], [14, 26], [15, 46], [8, 56], [1, 50]]], "m2");
+      celPart(G, [[[3, 30], [12, 29], [13, 45], [8, 52], [3, 47]]], "m1", { outline: false });
+      celPart(G, [[[7, 34], [9, 34], [9, 46], [7, 46]], [[3, 39], [13, 39], [13, 41], [3, 41]]], "m3", { outline: false });
+    } else {
+      celPart(G, [[[44, 44], [50, 44], [50, 62], [44, 62]]], "m2");
+      celPart(G, [[[44, 62], [50, 62], [50, 64], [44, 64]]], "d", { outline: false });
+      celPart(G, [[[44, 50], [50, 50], [50, 52], [44, 52]]], "m1", { outline: false });
+    }
+  }
+
+  function mechSprite(cls, w, P, scale = 4) {
+    const G = celCanvas(MECH_W, MECH_H);
+    ({ titan: drawTitan, striker: drawStriker, support: drawSupport })[cls](G, w);
+    return celPaint(G, mechMats(P), scale);
+  }
+
+  /* =========================================================
+     HEROES — full body, 48 x 64
+     ========================================================= */
+  const HERO_W = 48, HERO_H = 64;
+  const HERO_CLASSES = {
+    warrior: { name: "WARRIOR", c1: "#b8342f", c2: "#7a4f2e", stats: [9, 1, 5, 5, 6, 2], line: "Hits first, asks questions later.", skill: "Berserk Cleave" },
+    knight: { name: "KNIGHT", c1: "#2f58c8", c2: "#aab3c7", stats: [7, 1, 5, 2, 10, 3], line: "Holds the line so no one else has to.", skill: "Iron Wall" },
+    mage: { name: "MAGE", c1: "#6a3cc2", c2: "#e2b845", stats: [2, 9, 6, 5, 2, 7], line: "Turns the weather into a weapon.", skill: "Thunderstorm" },
+    archer: { name: "ARCHER", c1: "#3f8a45", c2: "#8a5a32", stats: [5, 2, 9, 7, 4, 3], line: "Rarely needs a second arrow.", skill: "Deadeye" },
+    healer: { name: "HEALER", c1: "#f1efe6", c2: "#2fa6a0", stats: [2, 7, 5, 5, 3, 9], line: "Keeps the whole party standing.", skill: "Sanctuary" },
+    assassin: { name: "ASSASSIN", c1: "#2a2d3e", c2: "#c0323c", stats: [6, 2, 8, 10, 3, 3], line: "In and out before the dust settles.", skill: "Shadowstep" },
+  };
+  const HERO_KEYS = ["warrior", "knight", "mage", "archer", "healer", "assassin"];
+  const HERO_STATS = ["STR", "MAG", "SKL", "SPD", "DEF", "RES"];
+  const HAIR_STYLES = ["SHORT", "SPIKY", "LONG"];
+  const HAIR_COLORS = ["#2c2a4a", "#6b3f25", "#e0b64a", "#c2412f", "#e8e6f2"];
+  const SKIN_TONES = ["#f6d2b0", "#e3ae82", "#c68959", "#8d5a37"];
+
+  function heroMats(h) {
+    const c = HERO_CLASSES[h.cls];
+    return {
+      s: celRamp(SKIN_TONES[h.skin]), h: celRamp(HAIR_COLORS[h.hairColor]),
+      c1: celRamp(c.c1), c2: celRamp(c.c2),
+      mt: celRamp("#b9c2d6"), lt: celRamp("#7a5132"), au: celRamp("#e0b43e"), wd: celRamp("#8a5a32"),
+      ink: ["#1a1426", "#1a1426", "#1a1426", "#1a1426", "#ffffff", "#ffffff"],
+      mg: celGlow(h.cls === "healer" ? "#9ff3e6" : h.cls === "mage" ? "#c9a2ff" : "#9fd8ff"),
+    };
+  }
+
+  function drawHero(G, h) {
+    const cls = h.cls;
+    // long hair falls behind the body
+    if (h.hair === 2 && cls !== "assassin") celPart(G, [[[13, 12], [35, 12], [37, 34], [11, 34]]], "h");
+    // cape / cloak behind
+    if (cls === "knight") celPart(G, [[[13, 26], [35, 26], [38, 56], [10, 56]]], "c1");
+    if (cls === "archer") celPart(G, [[[12, 24], [36, 24], [37, 52], [11, 52]]], "c1");
+    if (cls === "archer") { celPart(G, [[[33, 20], [37, 18], [40, 34], [36, 35]]], "lt"); celLine(G, 36, 16, 38, 19, "wd", 4); celLine(G, 38, 15, 40, 18, "wd", 4); }
+    // legs
+    const robe = cls === "mage" || cls === "healer";
+    if (!robe) {
+      celPart(G, [[[17, 44], [23, 44], [23, 56], [17, 56]], [[25, 44], [31, 44], [31, 56], [25, 56]]], cls === "knight" ? "mt" : cls === "assassin" ? "c1" : "lt");
+      celPart(G, [[[15, 55], [23, 55], [23, 61], [14, 61]], [[25, 55], [33, 55], [34, 61], [25, 61]]], cls === "knight" ? "mt" : "lt");
+    }
+    // torso by class
+    if (cls === "warrior") {
+      celPart(G, [[[16, 26], [32, 26], [33, 45], [15, 45]]], "lt");
+      celPart(G, [[[16, 38], [32, 38], [32, 42], [16, 42]]], "c1");
+      celDot(G, 24, 40, "au", 4); celDot(G, 23, 40, "au", 3);
+      celPart(G, [[[21, 26], [27, 26], [26, 31], [22, 31]]], "s", { outline: false });
+    } else if (cls === "knight") {
+      celPart(G, [[[15, 25], [33, 25], [33, 45], [15, 45]]], "mt");
+      celPart(G, [[[20, 29], [28, 29], [28, 45], [20, 45]]], "c1", { outline: false });
+      celPart(G, [[[22, 32], [26, 32], [26, 34], [22, 34]], [[23, 31], [25, 31], [25, 37], [23, 37]]], "au", { outline: false });
+    } else if (cls === "mage") {
+      celPart(G, [[[16, 25], [32, 25], [36, 61], [12, 61]]], "c1");
+      celPart(G, [[[22, 25], [26, 25], [26, 61], [22, 61]]], "c2", { outline: false });
+      celPart(G, [[[13, 58], [35, 58], [36, 61], [12, 61]]], "c2", { outline: false });
+    } else if (cls === "healer") {
+      celPart(G, [[[16, 25], [32, 25], [35, 61], [13, 61]]], "c1");
+      celPart(G, [[[21, 25], [27, 25], [26, 50], [22, 50]]], "c2", { outline: false });
+      celPart(G, [[[14, 57], [34, 57], [35, 61], [13, 61]]], "c2", { outline: false });
+      celPart(G, [[[16, 25], [32, 25], [31, 29], [17, 29]]], "au", { outline: false });
+    } else if (cls === "archer") {
+      celPart(G, [[[16, 26], [32, 26], [33, 46], [15, 46]]], "c1");
+      celPart(G, [[[15, 40], [33, 40], [33, 43], [15, 43]]], "lt", { outline: false });
+      celLine(G, 17, 27, 31, 39, "lt", 2);
+    } else {
+      celPart(G, [[[16, 26], [32, 26], [33, 45], [15, 45]]], "c1");
+      celPart(G, [[[15, 39], [33, 39], [33, 41], [15, 41]]], "c2", { outline: false });
+    }
+    // shoulders / pauldrons
+    if (cls === "knight") celPart(G, [oval(14, 27, 5, 4), oval(34, 27, 5, 4)], "mt");
+    if (cls === "warrior") celPart(G, [oval(14, 27, 5, 3.5)], "c2");
+    // arms
+    const sleeve = cls === "warrior" ? "s" : cls === "knight" ? "mt" : cls === "mage" || cls === "healer" ? "c1" : cls === "archer" ? "c1" : "c1";
+    celPart(G, [[[10, 27], [16, 27], [16, 42], [10, 42]], [[32, 27], [38, 27], [38, 42], [32, 42]]], sleeve);
+    if (cls === "archer" || cls === "assassin") celPart(G, [[[10, 36], [16, 36], [16, 41], [10, 41]], [[32, 36], [38, 36], [38, 41], [32, 41]]], "lt", { outline: false });
+    celPart(G, [oval(13, 43, 2.6, 2.4), oval(35, 43, 2.6, 2.4)], "s");
+    // neck + head
+    celPart(G, [[[21, 22], [27, 22], [27, 27], [21, 27]]], "s");
+    celPart(G, [oval(24, 15, 9, 9.5)], "s");
+    celPart(G, [[[19, 22], [29, 22], [27, 25], [21, 25]]], "s", { outline: false, tone: 2 });
+    // face: eyes, brows, mouth
+    const eye = (x) => { celDot(G, x, 16, "ink", 0); celDot(G, x + 1, 16, "ink", 0); celDot(G, x, 17, "ink", 0); celDot(G, x + 1, 17, "ink", 4); celLine(G, x - 1, 15, x + 1, 15, "h", 1); };
+    eye(19); eye(27);
+    celLine(G, 23, 21, 25, 21, "s", 1);
+    celDot(G, 18, 19, "s", 4); celDot(G, 30, 19, "s", 4);
+    // hair / hood
+    if (cls === "assassin") {
+      celPart(G, [[[13, 14], [16, 5], [24, 2], [32, 5], [35, 14], [35, 26], [31, 24], [31, 12], [17, 12], [17, 24], [13, 26]]], "c1");
+      celPart(G, [[[17, 11], [31, 11], [30, 14], [18, 14]]], "h", { outline: false });
+      celPart(G, [[[16, 19], [32, 19], [31, 25], [17, 25]]], "c2");
+    } else {
+      const hairTop = [[14, 16], [15, 8], [20, 4], [28, 4], [33, 8], [34, 16], [31, 12], [26, 10], [21, 10], [17, 12]];
+      celPart(G, [hairTop], "h");
+      if (h.hair === 0) celPart(G, [[[15, 10], [22, 8], [20, 15], [17, 13]], [[20, 8], [28, 8], [25, 14], [23, 11]], [[26, 8], [33, 10], [32, 16], [29, 12]]], "h");
+      if (h.hair === 1) celPart(G, [[[14, 10], [11, 3], [18, 6]], [[18, 6], [19, -1], [24, 4]], [[24, 4], [30, -1], [29, 6]], [[29, 6], [37, 3], [34, 11]], [[15, 11], [22, 8], [19, 15]], [[27, 8], [34, 11], [31, 15]]], "h");
+      if (h.hair === 2) celPart(G, [[[14, 9], [22, 7], [18, 16], [15, 22], [13, 18]], [[26, 7], [34, 9], [35, 18], [33, 22], [30, 16]], [[20, 7], [28, 7], [25, 13]]], "h");
+      celLine(G, 19, 6, 23, 5, "h", 5); celLine(G, 24, 5, 27, 5, "h", 4);
+    }
+    if (cls === "healer") celPart(G, [[[16, 7], [32, 7], [31, 9], [17, 9]]], "au", { outline: false });
+    // weapons
+    if (cls === "warrior") {
+      celPart(G, [[[37, 10], [39, 10], [39, 50], [37, 50]]], "wd");
+      celPart(G, [[[39, 9], [46, 6], [47, 20], [39, 17]]], "mt");
+      celPart(G, [[[36, 9], [31, 7], [31, 17], [36, 15]]], "mt");
+    } else if (cls === "knight") {
+      celPart(G, [[[37, 2], [39, 2], [39, 60], [37, 60]]], "wd");
+      celPart(G, [[[36, 4], [38, -2], [40, 4], [38, 9]]], "mt");
+      celPart(G, [[[3, 29], [14, 29], [14, 44], [8.5, 50], [3, 44]]], "c1");
+      celPart(G, [[[7, 33], [10, 33], [10, 43], [7, 43]], [[5, 36], [12, 36], [12, 39], [5, 39]]], "au", { outline: false });
+    } else if (cls === "mage") {
+      celPart(G, [[[37, 12], [39, 12], [39, 62], [37, 62]]], "wd");
+      celPart(G, [oval(38, 9, 3.4, 3.4)], "mg", { flat: true, tone: 3 });
+      celDot(G, 37, 8, "mg", 5);
+      celPart(G, [[[5, 38], [14, 38], [14, 46], [5, 46]]], "c2");
+    } else if (cls === "healer") {
+      celPart(G, [[[37, 12], [39, 12], [39, 62], [37, 62]]], "au");
+      celPart(G, [oval(38, 8, 4, 4)], "au");
+      celPart(G, [oval(38, 8, 2, 2)], "mg", { outline: false, flat: true, tone: 3 });
+    } else if (cls === "archer") {
+      for (let i = -16; i <= 16; i++) { const x = Math.round(8 - Math.sqrt(Math.max(0, 256 - i * i)) * 0.35), y = 42 + i; celDot(G, x, y, "wd", i < 0 ? 4 : 2); celDot(G, x - 1, y, "wd", 0); }
+      celLine(G, 8, 26, 8, 58, "ink", 4);
+    } else {
+      celPart(G, [[[35, 44], [36, 44], [43, 34], [42, 33]]], "mt");
+      celPart(G, [[[12, 44], [13, 44], [6, 34], [5, 35]]], "mt");
+    }
+  }
+
+  function heroSprite(h, scale = 4) {
+    const G = celCanvas(HERO_W, HERO_H);
+    drawHero(G, h);
+    return celPaint(G, heroMats(h), scale);
+  }
+
+  const CLASSES = MECH_CLASSES, CLASS_KEYS = MECH_KEYS, HOSTILE = HOSTILE_PAINT;
 
   /* ---------- portrait: hand-authored, cel-shaded, GBA tactics style ---------- */
   const PW = 72, PH = 72;
@@ -1157,61 +1147,42 @@
     return c;
   }
 
-  function paintLayerCanvas(L, mats, scale) {
-    const c = document.createElement("canvas");
-    c.width = L.w * scale; c.height = L.h * scale;
-    const ctx = c.getContext("2d");
-    let minX = L.w, minY = L.h, maxX = 0, maxY = 0;
-    for (let y = 0; y < L.h; y++) for (let x = 0; x < L.w; x++) {
-      const p = L.px[y][x];
-      if (!p) continue;
-      let t = p[1];
-      if (L.dim && t > 0 && !FLAT.has(p[0])) t = Math.max(1, t - 1);
-      ctx.fillStyle = mats[p[0]][t];
-      ctx.fillRect(x * scale, y * scale, scale, scale);
-      minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
-    }
-    c.className = "part" + (L.flame ? " flame" : "") + (L.rotor ? " rotor" : "") + (L.rotorV ? " rotor-v" : "");
-    c.style.transformOrigin = `${((minX + maxX + 1) / 2 / L.w) * 100}% ${((minY + maxY + 1) / 2 / L.h) * 100}%`;
-    return c;
-  }
-
   function buildUnit(kind, cls, w, P, scale = 4) {
     const wrap = document.createElement("div");
-    wrap.className = "punit " + (kind === "vehicle" ? "pveh" : "pmech");
-    const mats = materials(P);
-    (kind === "vehicle" ? vehicleParts(cls) : mechParts(cls, w)).forEach((L) => wrap.appendChild(paintLayerCanvas(L, mats, scale)));
+    wrap.className = "punit pmech";
+    wrap.appendChild(mechSprite(cls, w, P, scale));
     return wrap;
   }
   function buildPortrait(scale = 2) {
     return renderPortrait(scale);
   }
 
-  const saved = store.get("kd4-mech", {}) || {};
-  const cfg = { cls: CLASS_KEYS.includes(saved.cls) ? saved.cls : "striker", paint: 0, weapon: 0 };
-  if (CLASSES[cfg.cls].paints[saved.paint]) cfg.paint = saved.paint;
-  if (CLASSES[cfg.cls].weapons[saved.weapon]) cfg.weapon = saved.weapon;
+  const savedMech = store.get("kd5-mech", {}) || {};
+  const cfg = { cls: CLASS_KEYS.includes(savedMech.cls) ? savedMech.cls : "striker", paint: 0, weapon: 0 };
+  if (CLASSES[cfg.cls].paints[savedMech.paint]) cfg.paint = savedMech.paint;
+  if (CLASSES[cfg.cls].weapons[savedMech.weapon]) cfg.weapon = savedMech.weapon;
   const paintOf = (c = cfg) => CLASSES[c.cls].paints[c.paint];
+
+  const savedHero = store.get("kd5-hero", {}) || {};
+  const hero = {
+    cls: HERO_KEYS.includes(savedHero.cls) ? savedHero.cls : "warrior",
+    hair: HAIR_STYLES[savedHero.hair] ? savedHero.hair : 0,
+    hairColor: HAIR_COLORS[savedHero.hairColor] ? savedHero.hairColor : 0,
+    skin: SKIN_TONES[savedHero.skin] ? savedHero.skin : 1,
+  };
 
   function unitName(c = cfg) {
     const num = String(CLASS_KEYS.indexOf(c.cls) * 3 + c.weapon + 1).padStart(2, "0");
     return `${CLASS_INFO[c.cls].code}-${num} ${CLASSES[c.cls].name}`;
   }
   const mechEl = (c = cfg, scale = 4) => buildUnit("mech", c.cls, c.weapon, paintOf(c), scale);
-  const vehEl = (c = cfg, scale = 4) => buildUnit("vehicle", c.cls, c.weapon, paintOf(c), scale);
 
-  // one flattened canvas per unit look, for small uses (quest cards, tactics board)
+  // one canvas per unit look, for small uses (quest cards, tactics board)
   const unitCache = new Map();
   function unitImage(cls, weaponKind, P) {
     const k = cls + weaponKind + P.name;
-    if (unitCache.has(k)) return unitCache.get(k);
-    const out = document.createElement("canvas");
-    out.width = MW; out.height = MH;
-    const ctx = out.getContext("2d");
-    const mats = materials(P);
-    mechParts(cls, weaponKind).filter((L) => !L.flame).forEach((L) => ctx.drawImage(paintLayerCanvas(L, mats, 1), 0, 0));
-    unitCache.set(k, out);
-    return out;
+    if (!unitCache.has(k)) unitCache.set(k, mechSprite(cls, weaponKind, P, 1));
+    return unitCache.get(k);
   }
   function copyCanvas(src) {
     const c = document.createElement("canvas");
@@ -1221,138 +1192,109 @@
   }
 
   /* =========================================================
-     CHAPTER I — HANGAR
+     CHAPTER I — CREATE: hero creator + mech hangar
      ========================================================= */
   const bay = $("bay");
   const bayUnit = $("bayUnit");
   const heroMech = $("heroMech");
-  let vehicleMode = false;
-  let hangarBusy = false;
+  const configPanel = $("configPanel");
+  let createMode = store.get("kd5-tab", "hero") === "mech" ? "mech" : "hero";
 
-  function buildOptions() {
+  const statRows = (names, values) => names.map((n, i) => {
+    const v = Math.max(0, Math.min(10, values[i]));
+    return `<div class="stat"><span>${n}</span><span class="stat-bar">${Array.from({ length: 10 }, (_, k) => `<i class="${k < v ? "on" : ""}"></i>`).join("")}</span><b>${v}</b></div>`;
+  }).join("");
+
+  // generic option row: buttons or colour swatches, bound to a state object
+  function optionRow(label, items, isOn, onPick, kind = "btn", extra = "") {
+    const row = document.createElement("div");
+    row.className = "opt";
+    row.innerHTML = `<span class="opt-label">${label}${extra ? ` · <b>${extra}</b>` : ""}</span><div class="opt-row"></div>`;
+    const wrap = row.querySelector(".opt-row");
+    items.forEach((it, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(isOn(it, i)));
+      if (kind === "swatch") {
+        b.className = "swatch";
+        b.title = it.name;
+        b.setAttribute("aria-label", `${label}: ${it.name}`);
+        b.style.setProperty("--a", it.a); b.style.setProperty("--b", it.b || it.a); b.style.setProperty("--c", it.c || it.a);
+      } else {
+        b.className = "opt-btn" + (it.sub ? " opt-class" : "");
+        if (it.color) b.style.setProperty("--cc", it.color);
+        b.innerHTML = it.sub ? `${it.name}<small>${it.sub}</small>` : it.name;
+      }
+      b.addEventListener("click", () => { if (!isOn(it, i)) { onPick(it, i); blip([660, 990], 0.04); } });
+      wrap.appendChild(b);
+    });
+    return row;
+  }
+
+  function showUnit(canvas, kind) {
+    const wrap = document.createElement("div");
+    wrap.className = "stage-unit " + kind;
+    wrap.appendChild(canvas);
+    bayUnit.replaceChildren(wrap);
+    wrap.animate([{ transform: "translateY(10px) scale(.96)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 260, easing: "ease-out" });
+  }
+
+  function renderHero() {
+    const c = HERO_CLASSES[hero.cls];
+    showUnit(heroSprite(hero, 5), "hero");
+    $("unitLabel").textContent = "HERO";
+    $("unitName").textContent = "KENNY";
+    $("modeLabel").textContent = "CLASS";
+    $("unitMode").textContent = c.name;
+    configPanel.innerHTML = `<h3>HERO CREATION</h3>`;
+    configPanel.appendChild(optionRow("CLASS", HERO_KEYS.map((k) => ({ key: k, name: HERO_CLASSES[k].name })), (it) => it.key === hero.cls, (it) => { hero.cls = it.key; saveHero(); }));
+    configPanel.appendChild(optionRow("HAIR", HAIR_STYLES.map((n) => ({ name: n })), (it, i) => i === hero.hair, (it, i) => { hero.hair = i; saveHero(); }));
+    configPanel.appendChild(optionRow("HAIR COLOR", HAIR_COLORS.map((h, i) => ({ name: ["INK", "CHESTNUT", "GOLD", "CRIMSON", "SILVER"][i], a: h })), (it, i) => i === hero.hairColor, (it, i) => { hero.hairColor = i; saveHero(); }, "swatch"));
+    configPanel.appendChild(optionRow("SKIN", SKIN_TONES.map((s, i) => ({ name: `TONE ${i + 1}`, a: s })), (it, i) => i === hero.skin, (it, i) => { hero.skin = i; saveHero(); }, "swatch"));
+    const card = document.createElement("div");
+    card.className = "class-card";
+    card.innerHTML = `<p class="class-line">${c.line}</p><p class="class-skill">SIGNATURE SKILL · <b>${c.skill}</b></p><div class="stats">${statRows(HERO_STATS, c.stats)}</div>
+      <div class="config-actions"><button class="btn btn-alt" type="button" id="randomHero">RANDOMIZE</button></div>`;
+    configPanel.appendChild(card);
+    $("randomHero").addEventListener("click", () => {
+      hero.cls = pick(HERO_KEYS); hero.hair = Math.floor(rand(0, 3)); hero.hairColor = Math.floor(rand(0, 5)); hero.skin = Math.floor(rand(0, 4));
+      blip([523, 659, 784], 0.05);
+      saveHero();
+    });
+  }
+  function saveHero() { store.set("kd5-hero", hero); renderHero(); }
+
+  function renderMech() {
     const d = CLASSES[cfg.cls];
-    const groups = {
-      cls: CLASS_KEYS.map((k) => ({ value: k, name: CLASSES[k].name, sub: CLASSES[k].role, color: CLASSES[k].paints[0].m1 })),
-      paint: d.paints.map((p, i) => ({ ...p, value: i })),
-      weapon: d.weapons.map((name, i) => ({ name, value: i })),
-    };
-    document.querySelectorAll(".opt-row").forEach((row) => {
-      const key = row.dataset.opt;
-      row.innerHTML = "";
-      groups[key].forEach((opt) => {
-        const b = document.createElement("button");
-        b.setAttribute("aria-pressed", String(cfg[key] === opt.value));
-        if (key === "paint") {
-          b.className = "swatch";
-          b.title = opt.name;
-          b.setAttribute("aria-label", "Paint: " + opt.name);
-          b.style.setProperty("--a", opt.m1);
-          b.style.setProperty("--b", opt.m2);
-          b.style.setProperty("--c", opt.m3);
-        } else {
-          b.className = "opt-btn" + (opt.sub ? " opt-class" : "");
-          if (opt.color) b.style.setProperty("--cc", opt.color);
-          b.innerHTML = opt.sub ? `${opt.name}<small>${opt.sub}</small>` : opt.name;
-        }
-        b.addEventListener("click", () => {
-          if (hangarBusy || cfg[key] === opt.value) return;
-          cfg[key] = opt.value;
-          if (key === "cls") { cfg.paint = 0; cfg.weapon = 0; }
-          blip([660, 990], 0.04);
-          buildOptions();
-          renderUnit(true);
-          once("hangar-custom", () => addExp(40));
-        });
-        row.appendChild(b);
-      });
-    });
-    $("paintName").textContent = paintOf().name;
-  }
-
-  function renderStats() {
-    const base = CLASS_INFO[cfg.cls].stats, w = CLASS_INFO[cfg.cls].wmods[cfg.weapon];
-    $("stats").innerHTML = STAT_NAMES.map((n, i) => {
-      const v = Math.max(0, Math.min(10, base[i] + w[i]));
-      return `<div class="stat"><span>${n}</span><span class="stat-bar">${Array.from({ length: 10 }, (_, k) => `<i class="${k < v ? "on" : ""}"></i>`).join("")}</span><b>${v}</b></div>`;
-    }).join("");
-  }
-
-  const modeName = () => (vehicleMode ? CLASS_INFO[cfg.cls].vehicle : CLASSES[cfg.cls].role + " MECH");
-  function renderUnit(animate) {
-    bayUnit.replaceChildren(mechEl(), vehEl());
+    showUnit(mechSprite(cfg.cls, cfg.weapon, paintOf(), 5), "mech");
     heroMech.replaceChildren(mechEl(cfg, 5));
+    $("unitLabel").textContent = "UNIT";
     $("unitName").textContent = unitName();
-    $("unitMode").textContent = modeName();
-    renderStats();
-    store.set("kd4-mech", cfg);
-    if (animate) assemble(bayUnit.querySelector(vehicleMode ? ".pveh" : ".pmech"));
+    $("modeLabel").textContent = "TYPE";
+    $("unitMode").textContent = d.role;
+    configPanel.innerHTML = `<h3>MECH CONFIG</h3>`;
+    configPanel.appendChild(optionRow("CLASS", CLASS_KEYS.map((k) => ({ key: k, name: CLASSES[k].name, sub: CLASSES[k].role, color: CLASSES[k].paints[0].m1 })),
+      (it) => it.key === cfg.cls, (it) => { cfg.cls = it.key; cfg.paint = 0; cfg.weapon = 0; saveMech(); }));
+    configPanel.appendChild(optionRow("PAINT", d.paints.map((p) => ({ name: p.name, a: p.m1, b: p.m2, c: p.m3 })), (it, i) => i === cfg.paint, (it, i) => { cfg.paint = i; saveMech(); }, "swatch", paintOf().name));
+    configPanel.appendChild(optionRow("WEAPON", d.weapons.map((n) => ({ name: n })), (it, i) => i === cfg.weapon, (it, i) => { cfg.weapon = i; saveMech(); }));
+    const base = CLASS_INFO[cfg.cls].stats, w = CLASS_INFO[cfg.cls].wmods[cfg.weapon];
+    const stats = document.createElement("div");
+    stats.className = "stats";
+    stats.innerHTML = statRows(STAT_NAMES, base.map((v, i) => v + w[i]));
+    configPanel.appendChild(stats);
   }
+  function saveMech() { store.set("kd5-mech", cfg); renderMech(); }
 
-  const scatterPose = () =>
-    `translate(${rand(-140, 140)}px, ${rand(-110, 110)}px) rotate(${rand(-300, 300)}deg) scale(.2)`;
-  function scatterOut(el) {
-    [...el.querySelectorAll(".part")].forEach((p, i) => {
-      p.style.transition = `transform .45s ${i * 30}ms ease-in, opacity .45s ${i * 30}ms`;
-      p.style.transform = scatterPose();
-      p.style.opacity = "0";
-    });
+  function setCreateMode(m) {
+    createMode = m;
+    store.set("kd5-tab", m);
+    document.querySelectorAll(".ctab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mode === m)));
+    bay.classList.toggle("hero-mode", m === "hero");
+    if (m === "hero") renderHero(); else renderMech();
   }
-  function assemble(el) {
-    const parts = [...el.querySelectorAll(".part")];
-    parts.forEach((p) => {
-      p.style.transition = "none";
-      p.style.transform = scatterPose();
-      p.style.opacity = "0";
-    });
-    el.getBoundingClientRect();
-    requestAnimationFrame(() => {
-      parts.forEach((p, i) => {
-        p.style.transition = `transform .55s ${i * 40}ms cubic-bezier(.3,1.4,.5,1), opacity .3s ${i * 40}ms`;
-        p.style.transform = "";
-        p.style.opacity = "";
-      });
-    });
-  }
-
-  $("btnTransform").addEventListener("click", async () => {
-    if (hangarBusy) return;
-    hangarBusy = true;
-    const from = bayUnit.querySelector(vehicleMode ? ".pveh" : ".pmech");
-    scatterOut(from);
-    blip([220, 330, 220, 440, 330, 660], 0.06, "sawtooth");
-    await wait(650);
-    vehicleMode = !vehicleMode;
-    bay.classList.toggle("veh-mode", vehicleMode);
-    $("unitMode").textContent = modeName();
-    from.querySelectorAll(".part").forEach((p) => { p.style.transition = "none"; p.style.transform = ""; p.style.opacity = ""; });
-    assemble(bayUnit.querySelector(vehicleMode ? ".pveh" : ".pmech"));
-    await wait(900);
-    hangarBusy = false;
-    once("transform", () => { addExp(60); toast("ACHIEVEMENT: MORE THAN MEETS THE EYE"); });
-  });
-
-  $("btnSortie").addEventListener("click", async () => {
-    if (hangarBusy) return;
-    hangarBusy = true;
-    const fxEl = $("launchFx");
-    $("launchText").innerHTML = `${unitName()}<br>SORTIE!`;
-    fxEl.classList.remove("show");
-    void fxEl.offsetWidth;
-    fxEl.classList.add("show");
-    bay.classList.add("launching");
-    blip([110, 130, 150, 180, 220, 280, 360, 460], 0.07, "sawtooth");
-    await wait(1700);
-    bay.classList.remove("launching");
-    bay.classList.add("landing");
-    blip([200, 120], 0.12, "triangle");
-    await wait(750);
-    bay.classList.remove("landing");
-    hangarBusy = false;
-    once("sortie", () => addExp(100));
-  });
-
-  buildOptions();
-  renderUnit(false);
+  document.querySelectorAll(".ctab").forEach((b) => b.addEventListener("click", () => { if (b.dataset.mode !== createMode) { blip(880, 0.04); setCreateMode(b.dataset.mode); } }));
+  heroMech.replaceChildren(mechEl(cfg, 5));
+  setCreateMode(createMode);
 
   /* =========================================================
      CHAPTER II — QUEST BOARD + ATB BATTLE
@@ -1430,7 +1372,7 @@
       } else card.appendChild(spriteCanvas(q.sprite, 4));
       card.insertAdjacentHTML("beforeend",
         `<h3>${q.title}</h3><p><b>Target:</b> ${q.foe}<br>${q.hint}</p>` +
-        `<div class="reward">REWARD ${q.gil}G · ${q.exp} EXP</div>` +
+        `<div class="reward">LOOT · ${q.loot || "Mech Parts"}</div>` +
         `<button type="button">${tactics ? (cleared.has(q.id) ? "REDEPLOY" : "DEPLOY") : cleared.has(q.id) ? "HUNT AGAIN" : "ACCEPT QUEST"}</button>` +
         `<div class="stamp">CLEARED</div>`);
       card.querySelector("button").addEventListener("click", () => (tactics ? startTactics(q) : startBattle(q)));
@@ -1805,14 +1747,11 @@
     const carved = Math.floor(rand(1, 4));
     showResult(
       `<h3>VICTORY!</h3>` +
-      `<p>EXP ........ +${q.exp}</p><p>GIL ........ +${q.gil}</p>` +
       `<p>CARVED ..... ${q.loot} ×${carved}</p>` +
       `<div class="row"><button class="btn" id="resOk">CONTINUE</button></div>`,
       () => {
         $("resOk").addEventListener("click", () => {
           $("result").hidden = true;
-          addExp(q.exp);
-          addGil(q.gil);
           loot[q.loot] = (loot[q.loot] || 0) + carved;
           store.set("kd2-loot", loot);
           if (!cleared.has(q.id)) {
@@ -2280,12 +2219,10 @@
     FANFARE();
     const q = T.q, parts = Math.floor(rand(2, 5));
     showTResult(
-      `<h3>MISSION COMPLETE</h3><p>TURNS ...... ${T.turn}</p><p>EXP ........ +${q.exp}</p><p>GIL ........ +${q.gil}</p>` +
+      `<h3>MISSION COMPLETE</h3><p>TURNS ...... ${T.turn}</p>` +
       `<p>SALVAGED ... Mech Parts ×${parts}</p><div class="row"><button class="btn" id="tOk">CONTINUE</button></div>`,
       () => $("tOk").addEventListener("click", () => {
         $("tResult").hidden = true;
-        addExp(q.exp);
-        addGil(q.gil);
         loot["Mech Parts"] = (loot["Mech Parts"] || 0) + parts;
         store.set("kd2-loot", loot);
         if (!cleared.has(q.id)) {
@@ -2486,7 +2423,6 @@
       statusTabsEl.querySelectorAll(".menu-item").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
       TABS[b.dataset.tab]();
       blip(1046, 0.04);
-      once("tab-" + b.dataset.tab, () => addExp(15));
     });
   });
   const statusMenu = bindMenu(statusTabsEl);
@@ -2495,7 +2431,7 @@
   tabStatus();
 
   /* =========================================================
-     SAVE POINT
+     SAVE POINT — contact form (delivered by FormSubmit to kendevxz@gmail.com)
      ========================================================= */
   $("saveCrystal").appendChild(spriteCanvas("crystal", 12));
   const motes = $("motes");
@@ -2506,27 +2442,60 @@
     m.style.setProperty("--delay", (-rand(0, 5)).toFixed(1) + "s");
     motes.appendChild(m);
   }
-  const saveText = $("saveText");
-  bindMenu($("saveActions"));
-  let saving = false;
-  $("saveYes").addEventListener("click", async () => {
-    if (saving) return;
-    saving = true;
-    saveText.textContent = "Saving";
-    for (let i = 0; i < 3; i++) { await wait(350); saveText.textContent += " ▮"; blip(880, 0.04); }
-    await wait(300);
-    store.set("kd2-exp", exp);
-    store.set("kd2-gil", gil);
-    saveText.textContent = `Saved. KENNY · LV ${level} · ${gil.toLocaleString("en-US")} G. See you on the next adventure.`;
-    blip([784, 988, 1175], 0.08, "triangle");
-    once("saved", () => addExp(30));
-    saving = false;
-  });
-  $("saveNo").addEventListener("click", () => {
-    if (saving) return;
-    saveText.textContent = "Bold. Or reckless. (It autosaves anyway.)";
-    blip([330, 262], 0.08, "triangle");
-  });
+
+  const CONTACT_ENDPOINT = "https://formsubmit.co/ajax/kendevxz@gmail.com";
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  function wireContact(form) {
+    if (!form || form.dataset.wired) return;
+    form.dataset.wired = "1";
+    const status = form.querySelector(".form-status");
+    const button = form.querySelector("button[type=submit]");
+    const say = (msg, kind) => { status.textContent = msg; status.dataset.kind = kind || ""; };
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = form.elements.name.value.trim();
+      const email = form.elements.email.value.trim();
+      const message = form.elements.message.value.trim();
+      if (form.elements._honey.value) return;
+      if (!name || !email || !message) return say("Please fill in your name, email and message.", "error");
+      if (!EMAIL_RE.test(email)) return say("That email address doesn't look right.", "error");
+      button.disabled = true;
+      say("Sending...", "busy");
+      try {
+        const res = await fetch(CONTACT_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            name, email, message,
+            _subject: `New message from ${name} via kennydev.in`,
+            _replyto: email,
+            _template: "table",
+            _captcha: "false",
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && String(data.success) === "true") {
+          form.reset();
+          say("Message sent. Thanks, I'll get back to you soon.", "ok");
+          blip([784, 988, 1175], 0.08, "triangle");
+        } else {
+          throw new Error(data.message || "The message service didn't accept the message.");
+        }
+      } catch (err) {
+        const mailto = `mailto:kendevxz@gmail.com?subject=${encodeURIComponent("Hello from " + name)}&body=${encodeURIComponent(message + "\n\n" + name + " (" + email + ")")}`;
+        status.innerHTML = "";
+        status.dataset.kind = "error";
+        status.append("Couldn't send right now. ");
+        const a = document.createElement("a");
+        a.href = mailto;
+        a.textContent = "Email me directly instead.";
+        status.append(a);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+  wireContact($("contactForm"));
 
   /* =========================================================
      KEYBOARD — menus, battle, Konami code
@@ -2539,8 +2508,6 @@
     kIdx = k === KONAMI[kIdx] ? kIdx + 1 : (k === KONAMI[0] ? 1 : 0);
     if (kIdx === KONAMI.length) {
       kIdx = 0;
-      addExp(9999);
-      addGil(9999);
       toast("CHEAT ACTIVATED · LIMIT BREAK!");
       blip([523, 659, 784, 1046, 784, 1046], 0.09);
       rain();
@@ -2640,9 +2607,16 @@
       <footer class="c-footer" id="c-contact"><div class="c-wrap">
         <h2>Let's talk</h2>
         <p>Open to conversations about sales, customer success and product roles.</p>
-        <div class="c-actions"><a class="c-btn" href="mailto:kendevxz@gmail.com">kendevxz@gmail.com</a><a class="c-btn ghost" href="https://github.com/kendevxz" rel="noopener">github.com/kendevxz</a></div>
+        <form class="contact-form c-form" novalidate>
+          <div class="c-form-row"><label>Name<input name="name" autocomplete="name" required></label><label>Email<input name="email" type="email" autocomplete="email" required></label></div>
+          <label>Message<textarea name="message" rows="5" required></textarea></label>
+          <input type="text" name="_honey" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <div class="c-form-foot"><button class="c-btn" type="submit">Send message</button><p class="form-status" role="status" aria-live="polite"></p></div>
+        </form>
+        <div class="c-actions"><a class="c-btn ghost" href="mailto:kendevxz@gmail.com">kendevxz@gmail.com</a><a class="c-btn ghost" href="https://github.com/kendevxz" rel="noopener">github.com/kendevxz</a></div>
         <p class="c-small">© 2026 Kenny Devin Wijaya · <button type="button" class="c-link" id="toHardcore2">Switch to the hardcore view</button></p>
       </div></footer>`;
+    wireContact(casualEl.querySelector(".contact-form"));
     const portrait = buildPortrait(3);
     casualEl.querySelector(".c-avatar").appendChild(portrait);
     $("toHardcore").addEventListener("click", () => applyMode("hardcore", true));

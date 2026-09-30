@@ -18,16 +18,14 @@
   <header class="hud">
     <div class="hud-player">
       <span class="hud-name">KENNY</span>
-      <span class="hud-lv">LV <b id="lv">01</b></span>
-      <span class="exp-bar" title="EXP"><i id="expFill"></i></span>
     </div>
     <nav class="hud-nav" aria-label="Sections">
-      <a href="#hangar">HANGAR</a>
+      <a href="#hangar">CREATE</a>
       <a href="#quests">QUESTS</a>
       <a href="#status">STATUS</a>
+      <a href="#contact">CONTACT</a>
     </nav>
     <div class="hud-right">
-      <span class="gil"><b id="gil">0</b> G</span>
       <button id="sound" class="hud-btn" aria-pressed="false" title="Toggle sound">♪ OFF</button>
       <button id="modeBtn" class="hud-btn mode-btn" title="Switch to the casual, professional view">CASUAL</button>
     </div>
@@ -47,6 +45,7 @@
           <button role="menuitem" data-go="#hangar" class="menu-item active">NEW GAME</button>
           <button role="menuitem" data-go="#quests" class="menu-item">CONTINUE</button>
           <button role="menuitem" data-go="#status" class="menu-item">STATUS</button>
+          <button role="menuitem" data-go="#contact" class="menu-item">CONTACT</button>
           <button role="menuitem" data-go="config" class="menu-item">CONFIG <small id="cfgState">SOUND OFF</small></button>
           <span class="cursor" id="menuCursor" aria-hidden="true"></span>
         </div>
@@ -77,13 +76,18 @@
     </div>
   </div>
 
-  <!-- ============ CHAPTER 1: HANGAR ============ -->
+  <!-- ============ CHAPTER 1: CREATE ============ -->
   <section class="chapter hangar" id="hangar">
     <header class="chapter-head">
       <span class="chapter-num">CHAPTER I</span>
-      <h2>The Hangar</h2>
-      <p>Pick a class, paint it, arm it, then transform it or launch it.</p>
+      <h2>Create Your Unit</h2>
+      <p>Two roads. Create a hero, or build a mech.</p>
     </header>
+
+    <div class="create-tabs" role="tablist" aria-label="Create">
+      <button class="ctab" role="tab" data-mode="hero" aria-selected="true">HERO</button>
+      <button class="ctab" role="tab" data-mode="mech" aria-selected="false">MECH</button>
+    </div>
 
     <div class="hangar-grid">
       <div class="bay" id="bay">
@@ -92,35 +96,11 @@
         <div class="bay-unit" id="bayUnit"></div>
         <div class="bay-floor" aria-hidden="true"></div>
         <div class="bay-readout">
-          <span>UNIT</span><b id="unitName">RX-01 VANGUARD</b>
-          <span>MODE</span><b id="unitMode">ASSAULT MECH</b>
-        </div>
-        <div class="launch-fx" id="launchFx" aria-hidden="true">
-          <div class="speedlines"></div>
-          <p id="launchText">SORTIE!</p>
+          <span id="unitLabel">HERO</span><b id="unitName">KENNY</b>
+          <span id="modeLabel">CLASS</span><b id="unitMode">WARRIOR</b>
         </div>
       </div>
-
-      <div class="window config">
-        <h3>UNIT CONFIG</h3>
-        <div class="opt">
-          <span class="opt-label">CLASS</span>
-          <div class="opt-row" data-opt="cls"></div>
-        </div>
-        <div class="opt">
-          <span class="opt-label">PAINT · <b id="paintName"></b></span>
-          <div class="opt-row swatches" data-opt="paint"></div>
-        </div>
-        <div class="opt">
-          <span class="opt-label">WEAPON</span>
-          <div class="opt-row" data-opt="weapon"></div>
-        </div>
-        <div class="stats" id="stats"></div>
-        <div class="config-actions">
-          <button class="btn btn-alt" id="btnTransform">⟲ TRANSFORM</button>
-          <button class="btn" id="btnSortie">▲ SORTIE!</button>
-        </div>
-      </div>
+      <div class="window config" id="configPanel"></div>
     </div>
   </section>
 
@@ -165,19 +145,28 @@
     </div>
   </section>
 
-  <!-- ============ SAVE POINT ============ -->
-  <footer class="savepoint" id="save">
+  <!-- ============ SAVE POINT: CONTACT ============ -->
+  <footer class="savepoint" id="contact">
     <div class="save-crystal" aria-hidden="true">
       <div class="glow"></div>
       <div id="saveCrystal"></div>
       <div class="motes" id="motes"></div>
     </div>
     <div class="window save-window">
-      <p id="saveText">A save point. Would you like to save your progress?</p>
-      <div class="save-actions" id="saveActions">
-        <button class="menu-item" id="saveYes">YES</button>
-        <button class="menu-item" id="saveNo">NO</button>
-      </div>
+      <h3>SAVE POINT · SEND A MESSAGE</h3>
+      <p class="save-intro">Want to talk sales, product, or mechs? Leave a message here and it goes straight to my inbox.</p>
+      <form class="contact-form" id="contactForm" novalidate>
+        <div class="form-row">
+          <label>Name<input name="name" autocomplete="name" required></label>
+          <label>Email<input name="email" type="email" autocomplete="email" required></label>
+        </div>
+        <label>Message<textarea name="message" rows="5" required></textarea></label>
+        <input type="text" name="_honey" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <div class="form-foot">
+          <button class="btn" type="submit">SAVE &amp; SEND</button>
+          <p class="form-status" role="status" aria-live="polite"></p>
+        </div>
+      </form>
     </div>
     <div class="credits">
       <p class="credits-site">kennydev.in</p>
