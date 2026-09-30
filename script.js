@@ -993,285 +993,342 @@
   }
 
   /* =========================================================
-     HEROES — GBA tactics battle sprites, 64 x 64, facing right
+     HEROES — hand-placed GBA tactics sprites, 40 x 40, facing right
      ========================================================= */
-  const HERO_W = 64, HERO_H = 64;
+  const HERO_W = 40, HERO_H = 40;
   const HERO_CLASSES = {
-    warrior: { name: "WARRIOR", c1: "#b8342f", c2: "#7a4f2e", stats: [9, 1, 5, 5, 6, 2], line: "Hits first, asks questions later.", skill: "Berserk Cleave" },
-    knight: { name: "KNIGHT", c1: "#2f58c8", c2: "#aab3c7", stats: [7, 1, 5, 2, 10, 3], line: "Holds the line so no one else has to.", skill: "Iron Wall" },
-    mage: { name: "MAGE", c1: "#6a3cc2", c2: "#e2b845", stats: [2, 9, 6, 5, 2, 7], line: "Turns the weather into a weapon.", skill: "Thunderstorm" },
-    archer: { name: "ARCHER", c1: "#3f8a45", c2: "#8a5a32", stats: [5, 2, 9, 7, 4, 3], line: "Rarely needs a second arrow.", skill: "Deadeye" },
-    healer: { name: "HEALER", c1: "#f1efe6", c2: "#2fa6a0", stats: [2, 7, 5, 5, 3, 9], line: "Keeps the whole party standing.", skill: "Sanctuary" },
-    assassin: { name: "ASSASSIN", c1: "#3a3d52", c2: "#c0323c", stats: [6, 2, 8, 10, 3, 3], line: "In and out before the dust settles.", skill: "Shadowstep" },
+    warrior: { name: "WARRIOR", c1: "#c8382f", c2: "#7a4f2e", stats: [9, 1, 5, 5, 6, 2], line: "Hits first, asks questions later.", skill: "Berserk Cleave" },
+    knight: { name: "KNIGHT", c1: "#2f62d8", c2: "#aab3c7", stats: [7, 1, 5, 2, 10, 3], line: "Holds the line so no one else has to.", skill: "Iron Wall" },
+    mage: { name: "MAGE", c1: "#6f45d6", c2: "#e2b845", stats: [2, 9, 6, 5, 2, 7], line: "Turns the weather into a weapon.", skill: "Thunderstorm" },
+    archer: { name: "ARCHER", c1: "#3f9a4a", c2: "#8a5a32", stats: [5, 2, 9, 7, 4, 3], line: "Rarely needs a second arrow.", skill: "Deadeye" },
+    healer: { name: "HEALER", c1: "#f1efe6", c2: "#2fa6c0", stats: [2, 7, 5, 5, 3, 9], line: "Keeps the whole party standing.", skill: "Sanctuary" },
+    assassin: { name: "ASSASSIN", c1: "#3c4058", c2: "#c8323c", stats: [6, 2, 8, 10, 3, 3], line: "In and out before the dust settles.", skill: "Shadowstep" },
   };
   const HERO_KEYS = ["warrior", "knight", "mage", "archer", "healer", "assassin"];
   const HERO_STATS = ["STR", "MAG", "SKL", "SPD", "DEF", "RES"];
-  const HAIR_STYLES = ["SHORT", "SPIKY", "LONG"];
-  const HAIR_COLORS = ["#2c2a4a", "#6b3f25", "#e0b64a", "#c2412f", "#e8e6f2"];
-  const SKIN_TONES = ["#f6d2b0", "#e3ae82", "#c68959", "#8d5a37"];
+  const HAIR_STYLES = ["SHORT", "SPIKY", "PONYTAIL"];
+  const HAIR_COLORS = ["#34305a", "#7a4526", "#e8bf45", "#d0432f", "#e8e6f2"];
+  const SKIN_TONES = ["#f8d4b0", "#e8b084", "#c68959", "#8d5a37"];
 
   function heroMats(h) {
     const c = HERO_CLASSES[h.cls];
     return {
       s: celRamp(SKIN_TONES[h.skin]), h: celRamp(HAIR_COLORS[h.hairColor]),
       c1: celRamp(c.c1), c2: celRamp(c.c2),
-      mt: celRamp("#b9c2d6"), lt: celRamp("#7a5132"), au: celRamp("#e0b43e"), wd: celRamp("#9a6a3c"),
-      ink: ["#17131f", "#2b2742", "#17131f", "#17131f", "#ffffff", "#ffffff"],
-      sh: Array(6).fill("rgba(6,8,20,.45)"),
-      mg: celGlow(h.cls === "healer" ? "#9ff3e6" : h.cls === "mage" ? "#c9a2ff" : "#9fd8ff"),
+      mt: celRamp("#b3bfd6"), lt: celRamp("#8a5a34"), au: celRamp("#f0c040"), wd: celRamp("#a8743e"),
+      ink: ["#101018", "#1c1830", "#101018", "#101018", "#ffffff", "#ffffff"],
+      sh: Array(6).fill("rgba(4,6,16,.5)"),
+      mg: celGlow(h.cls === "healer" ? "#8ff0ff" : h.cls === "mage" ? "#d2a8ff" : "#9fd8ff"),
     };
   }
 
-  // one sprite part: rounded shading lit from the upper left, edges drawn in the part's own darkest tone
-  function spPart(G, polys, mat, o = {}) {
-    const m = celMask(G, polys);
-    const at = (x, y) => y >= 0 && y < G.h && x >= 0 && x < G.w && m[y][x];
-    if (o.outline !== false)
-      for (let y = 0; y < G.h; y++) for (let x = 0; x < G.w; x++)
-        if (!m[y][x] && (at(x + 1, y) || at(x - 1, y) || at(x, y + 1) || at(x, y - 1))) G.px[y][x] = [o.outlineMat || mat, 0];
-    // soften the mask, then light each pixel by the slope of the soft shape
-    const R = 2, soft = (x, y) => { let n = 0; for (let j = -R; j <= R; j++) for (let i = -R; i <= R; i++) n += at(x + i, y + j) ? 1 : 0; return n / ((2 * R + 1) * (2 * R + 1)); };
-    for (let y = 0; y < G.h; y++) for (let x = 0; x < G.w; x++) {
-      if (!m[y][x]) continue;
-      let t = 3;
-      if (!o.flat) {
-        const nx = soft(x - 1, y) - soft(x + 1, y), ny = soft(x, y - 1) - soft(x, y + 1);
-        const d = -nx * 0.55 - ny * 0.85;
-        t = d > 0.2 ? 4 : d < -0.34 ? 1 : d < -0.1 ? 2 : 3;
-        if (t === 4 && d > 0.42 && !at(x, y - 1)) t = 5;
-      }
-      G.px[y][x] = [mat, o.tone !== undefined ? o.tone : t];
-    }
-    return m;
-  }
-  // final pass: only the outer silhouette gets the dark ink line
-  function inkOutline(G) {
-    const solid = (x, y) => y >= 0 && y < G.h && x >= 0 && x < G.w && G.px[y][x] && G.px[y][x][0] !== "sh";
-    const add = [];
-    for (let y = 0; y < G.h; y++) for (let x = 0; x < G.w; x++) {
-      if (solid(x, y)) { const p = G.px[y][x]; if (p[1] === 0 && p[0] !== "ink" && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([i, j]) => !solid(x + i, y + j))) add.push([x, y]); continue; }
-      if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([i, j]) => solid(x + i, y + j) && G.px[y + j][x + i][1] !== 0)) add.push([x, y]);
-    }
-    add.forEach(([x, y]) => (G.px[y][x] = ["ink", 0]));
-  }
-  // a tapered limb between two points, as a polygon
-  function limb(x1, y1, x2, y2, w1, w2 = w1) {
-    const dx = x2 - x1, dy = y2 - y1, l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
-    return [[x1 + (nx * w1) / 2, y1 + (ny * w1) / 2], [x2 + (nx * w2) / 2, y2 + (ny * w2) / 2], [x2 - (nx * w2) / 2, y2 - (ny * w2) / 2], [x1 - (nx * w1) / 2, y1 - (ny * w1) / 2]];
-  }
-  // arm or leg: two segments plus a round joint
-  const joint = (a, b, c, w1, w2, w3) => [limb(a[0], a[1], b[0], b[1], w1, w2), limb(b[0], b[1], c[0], c[1], w2, w3), oval(a[0], a[1], w1 / 2, w1 / 2, 12), oval(b[0], b[1], w2 / 2, w2 / 2, 12), oval(c[0], c[1], w3 / 2.2, w3 / 2.2, 12)];
-  // boot facing right: heel at x0, rounded toe past x1
-  const boot = (x0, x1) => [[x0 + 1, 53], [x1 - 2, 53], [x1, 55], [x1 + 2, 55.6], [x1 + 3.2, 57], [x1 + 2.6, 58.4], [x0 + 0.5, 58.4], [x0, 56]];
-  const fold = (G, mat, ...ls) => ls.forEach(([a, b, c, d]) => celLine(G, a, b, c, d, mat, 2));
-
-  // head, three-quarter view facing right: hair mass behind, face lower right
-  const HEAD = [
-    ".....kkkkkk....",
-    "...kkhHHHHhkk..",
-    "..khhHHhhhhhhk.",
-    ".khhhhhhhhhhhhk",
-    ".khhhhhhhhhhhhk",
-    "khhhhhhhhhhhhhk",
-    "khjhhhhhhhhjhhk",
-    "kjjhhhhjhjsjhsk",
-    "kjjhhjzsssssssk",
-    "kjjhzssssossosk",
-    "kjjjzzsssossosk",
-    ".kjjzssssssssqk",
-    "..kjjzssssszssk",
-    "...kkzzsssssk..",
-    ".....kkkkkkk...",
-  ];
-  const HEAD_KEY = { k: ["ink", 0], o: ["ink", 1], q: ["s", 4], s: ["s", 3], z: ["s", 2], H: ["h", 4], h: ["h", 3], j: ["h", 2], J: ["h", 1] };
-  function pixGrid(G, rows, x0, y0, key) {
-    rows.forEach((r, y) => [...r].forEach((ch, x) => {
-      const v = key[ch], X = x0 + x, Y = y0 + y;
+  // palette letters: light / base / shadow / deep for each material
+  const SPK = {
+    k: ["ink", 0], o: ["ink", 1], "_": ["sh", 0],
+    q: ["s", 4], s: ["s", 3], z: ["s", 2],
+    H: ["h", 4], h: ["h", 3], j: ["h", 2], J: ["h", 1],
+    A: ["c1", 4], a: ["c1", 3], b: ["c1", 2], B: ["c1", 1],
+    C: ["c2", 4], c: ["c2", 3], d: ["c2", 2], D: ["c2", 1],
+    M: ["mt", 5], m: ["mt", 4], n: ["mt", 3], N: ["mt", 2],
+    L: ["lt", 4], l: ["lt", 3], t: ["lt", 2], T: ["lt", 1],
+    G: ["au", 4], g: ["au", 3], y: ["au", 2],
+    W: ["wd", 4], w: ["wd", 3], v: ["wd", 2],
+    E: ["mg", 5], e: ["mg", 4], f: ["mg", 3],
+  };
+  // a layer is a list of [y, x, "pixels"]; "." leaves what is underneath
+  function spLayer(G, rows, ox = 0, oy = 0) {
+    rows.forEach(([y, x, str]) => [...str].forEach((ch, i) => {
+      const v = SPK[ch], X = ox + x + i, Y = oy + y;
       if (v && X >= 0 && Y >= 0 && X < G.w && Y < G.h) G.px[Y][X] = v;
     }));
   }
-  const shift = (pts, x, y) => pts.map(([a, b]) => [a + x, b + y]);
-  function hairBack(G, h, hx, hy) {
-    // long hair: tapered locks swept back behind the shoulders
-    if (h.hair === 2 && h.cls !== "assassin") {
-      spPart(G, [shift([[1, 5], [8, 6], [9, 13], [7, 19], [3, 24], [-2, 26], [-1, 21], [-2, 15], [-1, 9]], hx, hy)], "h");
-      celLine(G, hx + 3, hy + 14, hx + 1, hy + 22, "h", 2); celLine(G, hx + 6, hy + 14, hx + 4, hy + 20, "h", 2);
-    }
+  const rowsOf = (lines, x = 0, y = 0) => lines.map((l, i) => [y + i, x, l]);
+
+  // heads, three-quarter view facing right (11 x 12)
+  const HEADS = {
+    short: [
+      "...kkkkk...",
+      "..kHHhhhk..",
+      ".kHhhhhhhk.",
+      "khhhhhhhhhk",
+      "khhhhhhjhhk",
+      "kjhhhjhsjsk",
+      "kjjhzsssssk",
+      "kjjzssossok",
+      "kjjzssossok",
+      ".kjzsssssqk",
+      "..kkzsszsk.",
+      "....kkkkk..",
+    ],
+    spiky: [
+      "k...k..k...",
+      "khk.khkkhk.",
+      "khhkhHhhhhk",
+      "khhhhhhhhhk",
+      "khhhhhhjhhk",
+      "kjhhhjhsjsk",
+      "kjjhzsssssk",
+      "kjjzssossok",
+      "kjjzssossok",
+      ".kjzsssssqk",
+      "..kkzsszsk.",
+      "....kkkkk..",
+    ],
+    hood: [
+      "...kkkkk...",
+      "..kAAaaak..",
+      ".kAaaaaaak.",
+      "kAaaaaaaaak",
+      "kaaaaaaabak",
+      "kaabhhhhhbk",
+      "kabbzsssssk",
+      "kabzssossok",
+      "kabzssossok",
+      "kabcCcccccк",
+      ".kabccccdk.",
+      "..kkkkkkk..",
+    ],
+  };
+  HEADS.hood[9] = "kabcCccccck";
+  const PONYTAIL = rowsOf([
+    "...kk",
+    "..kHk",
+    ".khhk",
+    "khhjk",
+    "khhjk",
+    "khjk.",
+    "kjjk.",
+    "kjk..",
+    ".kjk.",
+    "..k..",
+  ]);
+  function spHead(G, h, x, y) {
+    if (h.cls !== "assassin" && h.hair === 2) spLayer(G, PONYTAIL, x - 3, y + 1);
+    const key = h.cls === "assassin" ? "hood" : h.hair === 1 ? "spiky" : "short";
+    spLayer(G, rowsOf(HEADS[key], x, y));
+    if (h.cls === "healer") spLayer(G, [[y + 4, x + 3, "gGgGg"]]);
+    if (h.cls === "knight") spLayer(G, [[y + 4, x + 3, "aAaaa"]]);
+    if (h.cls !== "assassin" && h.hair === 2) spLayer(G, [[y + 3, x + 1, "g"]]);
   }
-  function drawHead(G, h, hx, hy) {
-    if (h.hair === 1 && h.cls !== "assassin")
-      spPart(G, [[[1, 6], [-4, 1], [3, 3]], [[1, 11], [-4, 10], [2, 8]], [[4, 3], [2, -3], [7, 1]], [[7, 1], [9, -4], [11, 1]], [[10, 2], [15, -2], [13, 4]], [[12, 5], [17, 5], [13, 8]]].map((p) => shift(p, hx, hy)), "h");
-    pixGrid(G, HEAD, hx, hy, HEAD_KEY);
-    if (h.hair === 2 && h.cls !== "assassin") spPart(G, [shift([[2, 8], [5, 7], [5, 13], [3, 16], [2, 12]], hx, hy)], "h");
-    if (h.cls === "healer") { celLine(G, hx + 2, hy + 5, hx + 13, hy + 6, "au", 4); celDot(G, hx + 11, hy + 6, "mg", 5); }
-    if (h.cls === "knight") celLine(G, hx + 2, hy + 5, hx + 13, hy + 6, "c1", 3);
-    if (h.cls === "assassin") {
-      spPart(G, [shift([[-1, 5], [3, -1], [9, -2], [14, 1], [16, 8], [13, 7], [12, 5], [6, 6], [5, 12], [3, 16], [-1, 14]], hx, hy)], "c1");
-      spPart(G, [shift([[5, 11], [15, 11], [14, 15], [6, 16]], hx, hy)], "c2");
-    }
+
+  const SHADOW = [[34, 7, "______________________"], [35, 9, "__________________"]];
+
+  // pixel helpers for long straight things: shafts, staffs, bow limbs, strings
+  function shaft(x0, y0, x1, y1, c) {
+    const out = [];
+    for (let y = y0; y <= y1; y++) out.push([y, Math.round(x0 + ((x1 - x0) * (y - y0)) / (y1 - y0 || 1)) - 1, "k" + c + "k"]);
+    out.push([y1 + 1, Math.round(x1) - 1, "kkk"]);
+    return out;
   }
+  function thread(pts, c) {
+    const out = [];
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) || 1;
+      for (let j = 0; j <= n; j++) out.push([Math.round(y0 + ((y1 - y0) * j) / n), Math.round(x0 + ((x1 - x0) * j) / n), c]);
+    }
+    return out;
+  }
+  // two-tone legs in a wide stance plus boots; p and boot are [shadow, base, light]
+  const LEGS = (p, boot) => {
+    const [d, c] = p, [bl, bb, bd] = boot;
+    return [
+      [26, 9, `k${d}${c}${c}${c}${d}k.k${c}${c}${c}${d}k`],
+      [27, 8, `k${d}${c}${c}${c}${d}k...k${c}${c}${c}${d}k`],
+      [28, 8, `k${d}${c}${c}${d}k.....k${c}${c}${d}k`],
+      [29, 7, `k${bl}${bb}${bb}k.......k${bl}${bb}${bb}k`],
+      [30, 6, `k${bl}${bb}${bb}${bd}k.......k${bl}${bb}${bb}${bd}k`],
+      [31, 6, `k${bl}${bb}${bb}${bb}${bd}k......k${bl}${bb}${bb}${bb}${bb}${bd}k`],
+      [32, 6, `k${bd.repeat(6)}k.....k${bd.repeat(8)}k`],
+      [33, 6, "kkkkkkkk.....kkkkkkkkkk"],
+    ];
+  };
+  // a cape swept back behind the body
+  const CAPE = (map) => rowsOf([
+    "......kbbk", ".....kbaak", "....kbaaak", "...kbaaAak", "..kbaaAaak", "..kbaaAaak", ".kbbaaAak.", ".kbaaaAak.",
+    "kbbaaaak..", "kbaaaAak..", "kbbaaaak..", "kbbaaaak..", "kBbbaaak..", ".kBbbbk...", "..kkkk....",
+  ].map((r) => r.replace(/[AabB]/g, (ch) => map[ch])), 2, 15);
+  // a long robe to the ground; t = centre trim [light, dark], belt / hem = [light, base, dark]
+  const ROBE = (A, a, b, B, t, belt, hem) => {
+    const mid = (n, tail) => `k${A}${a.repeat(n)}${t[0]}${t[1]}${tail}k`;
+    return [
+      [15, 11, `kkkk${t[0]}${t[0]}${t[1]}kkkkk`],
+      ...[16, 17, 18, 19].map((y) => [y, 10, mid(4, a + a + b + b)]),
+      [20, 10, `k${belt[0]}${belt[1].repeat(4)}${belt[0]}${belt[1].repeat(4)}${belt[2]}${belt[2]}k`],
+      [21, 10, mid(4, a + a + b + b)],
+      [22, 9, mid(5, a + a + b + b)], [23, 9, mid(5, a + a + b + b)],
+      [24, 8, mid(6, a + a + b + b)], [25, 8, mid(6, a + b + b + B)],
+      [26, 7, mid(7, a + b + b + B)], [27, 7, mid(7, a + b + b + B)],
+      [28, 6, mid(8, a + b + b + B)], [29, 6, mid(8, a + b + b + B)],
+      [30, 5, mid(9, a + b + b + B)],
+      [31, 5, `k${hem[0]}${hem[1].repeat(12)}${hem[2].repeat(3)}k`],
+      [32, 5, `k${hem[2].repeat(16)}k`],
+      [33, 5, "kkkkkkkkkkkkkkkkkk"],
+    ];
+  };
+  const BOW = [];
+  for (let y = 5; y <= 30; y++) BOW.push([y, 30 - Math.round((((y - 17.5) / 12) ** 2) * 4) - 1, "kWk"]);
+
+  const HERO_ART = {
+    warrior: {
+      head: [12, 3],
+      back: [
+        [16, 8, "kk"], [17, 7, "kqsk"], [18, 7, "kqsz"], [19, 7, "kqsz"], [20, 7, "kLlt"], [21, 7, "kLlt"],
+        [22, 7, "kqsz"], [23, 7, "kssz"], [24, 8, "kkk"],
+      ],
+      body: [
+        [15, 11, "kkkkksszkkkk"],
+        [16, 10, "kAaaaasszabbk"],
+        [17, 10, "kAaaaaaszabbk"],
+        [18, 10, "kAaaaaaazabbk"],
+        [19, 10, "kAaaaaaaaabbk"],
+        [20, 10, "kaaaaaaaabbBk"],
+        [21, 10, "kLllllGllltTk"],
+        [22, 10, "kbaaaaaaabbBk"],
+        [23, 10, "kddcccccccddk"],
+        [24, 10, "kdccccdccccdk"],
+        [25, 10, "kdcccdkcccddk"],
+        ...LEGS(["d", "c"], ["L", "l", "t"]),
+      ],
+      weapon: [
+        [0, 30, "kkkkk"],
+        [1, 29, "kkMMMMk"],
+        [2, 29, "kwMmmmMk"],
+        [3, 27, "kkkwMmmmmnk"],
+        [4, 27, "kmmwmmmmnnk"],
+        [5, 27, "knnwmmmnnnk"],
+        [6, 27, "kkkwmmnnnk"],
+        [7, 29, "kwnnnnk"],
+        [8, 29, "kwkkkk"],
+        ...shaft(30, 9, 22, 28, "w"),
+      ],
+      front: [
+        [15, 20, "kkkkk"], [16, 19, "kMmmmnk"], [17, 19, "kmmmnnk"], [18, 20, "kkkkk"],
+        [19, 21, "kqssk"], [20, 22, "kLtssk"], [21, 23, "kkssk"], [22, 24, "kkkk"],
+      ],
+    },
+    knight: {
+      head: [12, 3],
+      cape: CAPE({ A: "A", a: "a", b: "b", B: "B" }),
+      body: [
+        [15, 11, "kkkkkmnnkkkk"],
+        [16, 10, "kMmmmmmmnnnNk"],
+        [17, 10, "kMmmmaAannnNk"],
+        [18, 10, "kmmmmaaannnNk"],
+        [19, 10, "kmmmmmbnnnnNk"],
+        [20, 10, "knnnnnnnnNNNk"],
+        [21, 10, "kaAaaaaGaaabk"],
+        [22, 10, "kmMmmnnnnnnNk"],
+        [23, 10, "knmnnkknnnnNk"],
+        [24, 10, "kaAaaaaaaabbk"],
+        [25, 10, "kbaabbkaaabbk"],
+        ...LEGS(["n", "m"], ["M", "m", "N"]),
+      ],
+      weapon: [
+        [0, 32, "kk"], [1, 31, "kMk"], [2, 31, "kMnk"], [3, 30, "kMmnk"], [4, 30, "kmnnk"], [5, 30, "kkgkk"],
+        ...shaft(32, 6, 22, 31, "w"),
+      ],
+      front: [
+        [16, 5, "kkkkkkkkk"],
+        [17, 5, "kAaaGaabk"], [18, 5, "kAaaGaabk"], [19, 5, "kAGGGGGbk"], [20, 5, "kAaaGaabk"],
+        [21, 5, "kAaaGaabk"], [22, 5, "kAaaGaabk"], [23, 5, "kbaaGabBk"], [24, 6, "kbaGabk"], [25, 7, "kbbBk"], [26, 8, "kBk"], [27, 9, "k"],
+        [15, 20, "kkkkk"], [16, 19, "kMmmmnk"], [17, 19, "kmmmnnk"], [18, 20, "kkkkk"],
+        [19, 21, "kmnnk"], [20, 22, "kmnMMk"], [21, 23, "kkMmk"], [22, 24, "kkkk"],
+      ],
+    },
+    mage: {
+      head: [12, 3],
+      cape: CAPE({ A: "a", a: "b", b: "B", B: "B" }),
+      back: [[16, 8, "kkk"], [17, 7, "kAaak"], [18, 7, "kAabk"], [19, 7, "kAabk"], [20, 8, "kbbk"], [21, 9, "kqsk"], [22, 9, "kkk"]],
+      body: ROBE("A", "a", "b", "B", ["g", "y"], ["G", "g", "y"], ["G", "g", "y"]),
+      front: [
+        [18, 12, "kkkk"], [19, 12, "kLgk"], [20, 12, "kLgk"], [21, 12, "ktyk"], [22, 12, "kkkk"],
+        [15, 20, "kkkkk"], [16, 19, "kAaaaakkk"], [17, 19, "kAaaaaaagkqsk"], [18, 20, "kbbaabbgkszk"], [19, 21, "kkkkkkkk.kk"],
+        [13, 33, "fef"], [14, 32, "feEef"], [15, 32, "eEEEe"], [16, 32, "feEef"], [17, 33, "fef"],
+        [11, 35, "E"], [19, 36, "e"], [12, 30, "e"], [20, 31, "E"], [15, 38, "e"],
+      ],
+    },
+    archer: {
+      head: [12, 3],
+      back: [[11, 7, "kAk"], [12, 7, "kAaAk"], [13, 7, "kkkkk"], [14, 7, "kLlk"], [15, 7, "kLlk"], [16, 7, "kLlk"], [17, 7, "kLtk"], [18, 8, "kLtk"], [19, 8, "kttk"], [20, 8, "kkk"]],
+      body: [
+        [15, 11, "kkkkksszkkkk"],
+        [16, 10, "kAaaaaszaabbk"],
+        [17, 10, "kAaaaaaaaabbk"],
+        [18, 10, "kAaLaaaaaabbk"],
+        [19, 10, "kAaaLaaaaabbk"],
+        [20, 10, "kAaaaLaaaabbk"],
+        [21, 10, "kLlllllGllltk"],
+        [22, 10, "kAaaaaaaaabbk"],
+        [23, 10, "kAaaaaaaaabBk"],
+        [24, 10, "kbbbbbkbbbBBk"],
+        [25, 10, "kdcccdkcccddk"],
+        ...LEGS(["d", "c"], ["L", "l", "t"]),
+      ],
+      weapon: [...BOW, [4, 25, "kk"], [31, 25, "kk"]],
+      front: [
+        ...thread([[26, 5], [22, 15], [26, 30]], "M"),
+        [16, 20, "kkkkkkkkkk"], [17, 19, "kAaaaaaLLqsk"], [18, 19, "kbbbbbbttszk"], [19, 20, "kkkkkkkkkk"],
+        [14, 11, "kkkkkkkkkkkk"], [15, 10, "kAaaaaaaaaqsk"], [16, 10, "kbbbbbbbbbszk"], [17, 11, "kkkkkkkkkkk"],
+        [15, 23, "wwwwwwwwwwwMMk"], [14, 35, "k"], [16, 35, "k"],
+      ],
+    },
+    healer: {
+      head: [12, 3],
+      cape: CAPE({ A: "C", a: "c", b: "d", B: "D" }),
+      back: [[16, 8, "kkk"], [17, 7, "kAaak"], [18, 7, "kAabk"], [19, 7, "kAabk"], [20, 8, "kAbk"], [21, 9, "kqsk"], [22, 9, "kkk"]],
+      body: ROBE("A", "a", "b", "B", ["c", "d"], ["G", "g", "y"], ["C", "c", "d"]),
+      weapon: [
+        [0, 26, "kkkkk"], [1, 25, "kGgggyk"], [2, 25, "kgkEkyk"], [3, 25, "kgkekyk"], [4, 25, "kGgggyk"], [5, 26, "kkgkk"],
+        [1, 22, "kGk"], [2, 21, "kGGk"], [3, 22, "kk"], [1, 31, "kGk"], [2, 31, "kGGk"], [3, 32, "kk"],
+        ...shaft(28, 6, 28, 32, "g"),
+      ],
+      front: [[15, 20, "kkkkk"], [16, 19, "kAaaakk"], [17, 19, "kAaaaaak"], [18, 20, "kbaaabbk"], [19, 21, "kbbbbkqsk"], [20, 22, "kkkkkszk"], [21, 26, "kkk"]],
+    },
+    assassin: {
+      head: [14, 6],
+      back: [
+        [15, 8, "kkkkkkk"], [16, 4, "kkkkccccCCck"], [17, 2, "kccCccddddck"], [18, 1, "kcddk.kddk"], [19, 1, "kdk...kk"], [20, 2, "k"],
+        [20, 11, "kk"], [21, 10, "kbak"], [22, 9, "kbak"], [23, 9, "kqsk"], [24, 8, "kMk"], [25, 7, "kMk"], [26, 6, "kk"],
+      ],
+      body: [
+        [18, 14, "kkkkszkkkk"],
+        [19, 12, "kAaaaaaaabbk"],
+        [20, 11, "kAaaaaaaaabbk"],
+        [21, 11, "kAaaaaaaabbBk"],
+        [22, 11, "kaaaaaaaabbBk"],
+        [23, 11, "kLllGllllttk"],
+        [24, 11, "kbbbbbbbbBBk"],
+        [25, 9, "kabbk...kaaaaaabk"],
+        [26, 8, "kabbk....kbbbbaabbk"],
+        [27, 7, "kabbk......kkkkkabbk"],
+        [28, 6, "kabbk..........kabbk"],
+        [29, 5, "kaabk...........kabbk"],
+        [30, 3, "kLllk.............kLlltk"],
+        [31, 2, "kLlltk.............kLllltk"],
+        [32, 2, "kttttk.............kttttttk"],
+        [33, 2, "kkkkkk.............kkkkkkkk"],
+      ],
+      front: [
+        [20, 21, "kkkkkkk"], [21, 20, "kAaaaaaLkk"], [22, 21, "kbbbbbLqsk"], [23, 22, "kkkkkkkkk"],
+        [21, 31, "gkkkkk"], [22, 31, "gMMmmnk"], [23, 31, "gkkkkk"],
+      ],
+    },
+  };
 
   function drawHero(G, h) {
-    const cls = h.cls, S = "s";
-    spPart(G, [oval(31, 58.5, 17, 2.6, 24)], "sh", { outline: false, flat: true });
-    if (cls === "warrior") {
-      const hx = 24, hy = 9;
-      hairBack(G, h, hx, hy);
-      spPart(G, joint([27, 28], [22, 34], [25, 39], 5, 5, 4), S);
-      spPart(G, [limb(23, 35, 25, 38, 5)], "lt");
-      spPart(G, [oval(26, 39.5, 2.5, 2.5)], S);
-      spPart(G, joint([28, 42], [23, 49], [20, 55], 7, 6, 5), "c2");
-      spPart(G, [boot(14, 21)], "lt");
-      spPart(G, [[[25, 25], [40, 25], [41, 31], [38, 39], [27, 39], [25, 32]]], "lt");
-      spPart(G, [[[31, 25], [36, 25], [34, 31], [33, 31]]], S, { outline: false });
-      spPart(G, [[[26, 39], [39, 39], [41, 45], [25, 45]]], "c2");
-      fold(G, "c2", [29, 41, 30, 44], [36, 41, 35, 44]);
-      spPart(G, [[[26, 36], [39, 36], [39, 40], [26, 40]]], "c1");
-      celDot(G, 33, 38, "au", 4); celDot(G, 34, 38, "au", 3);
-      spPart(G, [[[28, 39], [32, 39], [31, 47], [28, 46]]], "c1");
-      spPart(G, joint([36, 42], [41, 48], [42, 55], 7, 6, 5), "c2");
-      spPart(G, [boot(38, 44)], "lt");
-      spPart(G, [[[31, 21], [36, 21], [36, 26], [31, 26]]], S);
-      drawHead(G, h, hx, hy);
-      spPart(G, [limb(40, 51, 55, 13, 2.4)], "wd");
-      spPart(G, [[[51, 12], [56, 11], [62, 6], [63, 17], [60, 26], [55, 20], [51, 21]]], "mt");
-      spPart(G, [[[51, 13], [46, 11], [46, 19], [51, 19]]], "mt");
-      celLine(G, 57, 12, 60, 9, "mt", 5); celLine(G, 61, 9, 61, 19, "mt", 5);
-      spPart(G, joint([38, 27], [44, 32], [47, 36], 6, 5, 4), S);
-      spPart(G, [limb(44, 32, 47, 35, 5)], "lt");
-      spPart(G, [oval(46.5, 36.5, 2.6, 2.6)], S);
-      spPart(G, [oval(41, 28.5, 4, 3.2)], "mt");
-      celLine(G, 29, 26, 38, 37, "c2", 2);
-    } else if (cls === "knight") {
-      const hx = 24, hy = 8;
-      hairBack(G, h, hx, hy);
-      spPart(G, [[[27, 25], [36, 25], [31, 37], [23, 52], [11, 56], [9, 52], [17, 41]]], "c1");
-      fold(G, "c1", [27, 30, 17, 48], [30, 32, 20, 51]);
-      spPart(G, [oval(26, 26, 5, 4)], "mt");
-      spPart(G, joint([28, 41], [25, 48], [23, 55], 7, 7, 6), "mt");
-      spPart(G, [boot(17, 24)], "mt");
-      spPart(G, [[[24, 24], [41, 24], [42, 33], [39, 40], [26, 40], [24, 33]]], "mt");
-      spPart(G, [[[25, 38], [40, 38], [42, 44], [23, 44]]], "mt");
-      celLine(G, 26, 26, 30, 26, "mt", 5); celDot(G, 27, 39, "mt", 5); celDot(G, 28, 39, "mt", 5);
-      spPart(G, [[[25, 37], [40, 37], [40, 40], [25, 40]]], "c1");
-      celDot(G, 34, 38, "au", 4); celDot(G, 35, 38, "au", 3);
-      celLine(G, 28, 29, 37, 29, "c1", 3); celLine(G, 32, 30, 33, 35, "mt", 5);
-      spPart(G, joint([36, 41], [40, 48], [41, 55], 7, 7, 6), "mt");
-      spPart(G, [boot(37, 44)], "mt");
-      spPart(G, [[[31, 20], [36, 20], [36, 25], [31, 25]]], S);
-      drawHead(G, h, hx, hy);
-      spPart(G, [[[15, 28], [27, 28], [27, 42], [21, 49], [15, 42]]], "c1", {});
-      spPart(G, [[[18, 31], [24, 31], [24, 41], [21, 45], [18, 41]]], "c1", { tone: 4, outline: false });
-      spPart(G, [[[20, 32], [22, 32], [22, 42], [20, 42]], [[17.5, 35], [25, 35], [25, 37], [17.5, 37]]], "au", { outline: false });
-      spPart(G, [limb(37, 54, 54, 8, 2.4)], "wd");
-      spPart(G, [[[51, 10], [56, 0], [57, 11]]], "mt");
-      spPart(G, [limb(52, 13, 56, 14, 2.2)], "au");
-      spPart(G, joint([39, 27], [43, 33], [45, 37], 6, 6, 5), "mt");
-      spPart(G, [oval(45, 37, 2.7, 2.7)], "mt");
-      spPart(G, [oval(41.5, 27.5, 5.2, 4)], "mt");
-      celLine(G, 38, 28, 45, 28, "c1", 3);
-    } else if (cls === "mage") {
-      const hx = 24, hy = 10;
-      hairBack(G, h, hx, hy);
-      spPart(G, [[[27, 26], [37, 26], [31, 36], [23, 50], [13, 56], [9, 52], [18, 40]]], "c1");
-      fold(G, "c1", [28, 31, 18, 48], [31, 33, 20, 51]);
-      spPart(G, joint([27, 28], [24, 34], [30, 36], 5, 5, 4), "c1");
-      spPart(G, [[[26, 25], [40, 25], [41, 36], [45, 56], [38, 57], [31, 56], [22, 57], [24, 40]]], "c1");
-      spPart(G, [[[22.5, 53], [44.5, 53], [45, 57], [22, 57]]], "c2");
-      fold(G, "c1", [28, 40, 26, 52], [40, 40, 42, 52], [32, 44, 31, 52]);
-      celLine(G, 35, 28, 37, 53, "c2", 3);
-      spPart(G, [[[25, 35], [41, 35], [41, 37], [25, 37]]], "c2");
-      spPart(G, [[[26, 57], [31, 57], [31, 59], [25, 59]], [[37, 57], [42, 57], [44, 59], [37, 59]]], "lt");
-      spPart(G, [[[31, 22], [36, 22], [36, 27], [31, 27]]], S);
-      spPart(G, [[[25, 24], [41, 24], [43, 29], [34, 31], [23, 29]]], "c2");
-      drawHead(G, h, hx, hy);
-      spPart(G, [[[26, 31], [33, 29], [35, 37], [28, 39]]], "c2");
-      spPart(G, [[[27, 32], [32, 30.5], [33.5, 36], [28.5, 37.5]]], "c1", { outline: false, tone: 2 });
-      spPart(G, [oval(31, 36.5, 2.3, 2.3)], S);
-      spPart(G, [limb(39, 27, 45, 31, 6, 6), limb(45, 31, 49, 29, 6, 7)], "c1");
-      spPart(G, [limb(47, 29.5, 49.5, 29, 7.5, 7.5)], "c2");
-      spPart(G, [oval(52, 28.5, 2.4, 2.4)], S);
-      spPart(G, [oval(57, 26, 4.2, 4.2, 16)], "mg", { outline: false, tone: 3 });
-      spPart(G, [oval(57, 26, 2.2, 2.2, 12)], "mg", { outline: false, tone: 5 });
-      [[54, 19], [61, 21], [62, 31], [55, 33], [59, 17]].forEach(([x, y], i) => celDot(G, x, y, "mg", i % 2 ? 4 : 5));
-    } else if (cls === "archer") {
-      const hx = 23, hy = 9;
-      hairBack(G, h, hx, hy);
-      spPart(G, [[[20, 21], [25, 19], [30, 36], [25, 38]]], "lt");
-      [[20, 18], [22, 17], [24, 16]].forEach(([x, y]) => { celLine(G, x, y + 3, x + 1, y, "c2", 4); celDot(G, x + 1, y - 1, "mt", 5); });
-      spPart(G, joint([28, 42], [23, 49], [21, 55], 6, 6, 5), "c2");
-      spPart(G, [boot(15, 21)], "lt");
-      spPart(G, [[[26, 25], [39, 25], [40, 36], [42, 46], [25, 46], [26, 36]]], "c1");
-      fold(G, "c1", [29, 40, 28, 45], [37, 40, 38, 45]);
-      spPart(G, joint([35, 42], [39, 49], [40, 55], 6, 6, 5), "c2");
-      spPart(G, [boot(36, 42)], "lt");
-      spPart(G, [[[25, 36], [41, 36], [41, 39], [25, 39]]], "lt");
-      celLine(G, 28, 26, 38, 36, "lt", 2);
-      spPart(G, [[[31, 21], [36, 21], [36, 26], [31, 26]]], S);
-      drawHead(G, h, hx, hy);
-      celLine(G, 49, 11, 36, 28, "mt", 5); celLine(G, 36, 28, 49, 45, "mt", 5);
-      const bow = [];
-      for (let i = 0; i < 16; i++) { const a = -1.25 + (i / 15) * 2.5, b = -1.25 + ((i + 1) / 15) * 2.5; bow.push(limb(46 + Math.cos(a) * 8, 28 + Math.sin(a) * 17, 46 + Math.cos(b) * 8, 28 + Math.sin(b) * 17, Math.abs(a) < 0.5 ? 3 : 2)); }
-      spPart(G, bow, "wd");
-      spPart(G, [limb(52, 25, 55, 31, 3)], "lt");
-      spPart(G, [limb(38, 27, 51, 28, 5, 4)], "c1");
-      spPart(G, [limb(46, 27.5, 51, 28, 4.5)], "lt");
-      spPart(G, [oval(53, 28, 2.3, 2.3)], S);
-      spPart(G, [limb(37, 28, 58, 28, 1.2)], "wd", { outline: false, tone: 4 });
-      spPart(G, [[[57, 26], [61, 28], [57, 30]]], "mt");
-      spPart(G, joint([28, 27], [23, 27], [34, 28], 5, 5, 4), "c1");
-      spPart(G, [oval(35.5, 28, 2.3, 2.3)], S);
-    } else if (cls === "healer") {
-      const hx = 24, hy = 10;
-      hairBack(G, h, hx, hy);
-      spPart(G, [[[27, 25], [36, 25], [31, 36], [24, 52], [14, 56], [11, 51], [19, 40]]], "c2");
-      fold(G, "c2", [28, 30, 19, 48], [31, 32, 21, 51]);
-      spPart(G, [[[26, 25], [39, 25], [40, 37], [44, 57], [23, 57], [25, 37]]], "c1");
-      spPart(G, [[[31.5, 27], [35, 27], [36.5, 54], [30.5, 54]]], "c2", { outline: false });
-      spPart(G, [[[23, 54], [44, 54], [44.5, 57], [22.5, 57]]], "c2", { outline: false });
-      fold(G, "c1", [27, 40, 25, 53], [40, 40, 42, 53]);
-      spPart(G, [[[25, 36], [40, 36], [40, 38.5], [25, 38.5]]], "au");
-      spPart(G, [[[31, 22], [36, 22], [36, 27], [31, 27]]], S);
-      spPart(G, [[[25, 24], [41, 24], [42, 28], [33, 30], [24, 28]]], "c1");
-      celLine(G, 26, 27, 41, 27, "au", 4);
-      drawHead(G, h, hx, hy);
-      spPart(G, joint([28, 28], [27, 34], [32, 33], 5, 5, 4), "c1");
-      spPart(G, [oval(33, 33, 2.3, 2.3)], S);
-      spPart(G, [limb(47, 57, 47, 10, 2.4)], "au");
-      spPart(G, [oval(47, 8, 4.2, 4.2, 16)], "au");
-      spPart(G, [oval(47, 8, 2.2, 2.2, 12)], "mg", { outline: false, tone: 4 });
-      celDot(G, 46, 7, "mg", 5);
-      spPart(G, [[[43, 9], [38, 5], [41, 11]], [[51, 9], [56, 5], [53, 11]]], "au");
-      spPart(G, joint([39, 27], [42, 34], [46, 34], 6, 5, 5), "c1");
-      spPart(G, [oval(47, 34, 2.5, 2.5)], S);
-    } else {
-      const hx = 27, hy = 13;
-      spPart(G, [[[30, 26], [34, 27], [26, 31], [16, 28], [8, 33], [5, 29], [13, 23], [24, 24]]], "c2");
-      spPart(G, joint([29, 31], [24, 36], [27, 40], 5, 5, 4), "c1");
-      spPart(G, [oval(27.5, 40.5, 2.3, 2.3)], S);
-      spPart(G, [limb(26.5, 42, 21, 48, 2, 1)], "mt");
-      spPart(G, joint([29, 43], [20, 48], [14, 55], 6, 6, 5), "c1");
-      spPart(G, [boot(8, 13)], "lt");
-      spPart(G, [[[27, 28], [40, 28], [42, 35], [39, 43], [27, 43], [25, 35]]], "c1");
-      spPart(G, [[[26, 39], [40, 39], [40, 42], [26, 42]]], "lt");
-      celDot(G, 30, 40, "au", 4);
-      spPart(G, joint([36, 43], [44, 47], [43, 55], 7, 6, 5), "c1");
-      spPart(G, [limb(43, 50, 43, 54, 5.5)], "lt");
-      spPart(G, [boot(39, 46)], "lt");
-      spPart(G, [[[34, 25], [39, 25], [39, 29], [34, 29]]], S);
-      drawHead(G, h, hx, hy);
-      spPart(G, joint([39, 30], [45, 34], [49, 35], 5, 5, 4), "c1");
-      spPart(G, [limb(46, 34.5, 49, 35, 4.5)], "lt");
-      spPart(G, [limb(52, 34, 61, 30, 2.4, 1)], "mt");
-      celLine(G, 51, 32, 52, 37, "au", 4);
-      spPart(G, [oval(50.5, 35, 2.3, 2.3)], S);
-    }
+    const art = HERO_ART[h.cls] || HERO_ART.warrior;
+    spLayer(G, SHADOW);
+    if (art.cape) spLayer(G, art.cape);
+    spLayer(G, art.back || []);
+    spLayer(G, art.body);
+    spHead(G, h, art.head[0], art.head[1]);
+    spLayer(G, art.weapon || []);
+    spLayer(G, art.front || []);
   }
 
-  function heroSprite(h, scale = 4) {
+  function heroSprite(h, scale = 8) {
     const G = celCanvas(HERO_W, HERO_H);
     drawHero(G, h);
-    inkOutline(G);
     return celPaint(G, heroMats(h), scale);
   }
 
@@ -1563,7 +1620,7 @@
 
   function renderHero() {
     const c = HERO_CLASSES[hero.cls];
-    showUnit(heroSprite(hero, 5), "hero");
+    showUnit(heroSprite(hero, 8), "hero");
     $("unitLabel").textContent = "HERO";
     $("unitName").textContent = "KENNY";
     $("modeLabel").textContent = "CLASS";
