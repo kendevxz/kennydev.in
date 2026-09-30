@@ -993,16 +993,16 @@
   }
 
   /* =========================================================
-     HEROES — full body, 48 x 64
+     HEROES — GBA tactics battle sprites, 64 x 64, facing right
      ========================================================= */
-  const HERO_W = 48, HERO_H = 64;
+  const HERO_W = 64, HERO_H = 64;
   const HERO_CLASSES = {
     warrior: { name: "WARRIOR", c1: "#b8342f", c2: "#7a4f2e", stats: [9, 1, 5, 5, 6, 2], line: "Hits first, asks questions later.", skill: "Berserk Cleave" },
     knight: { name: "KNIGHT", c1: "#2f58c8", c2: "#aab3c7", stats: [7, 1, 5, 2, 10, 3], line: "Holds the line so no one else has to.", skill: "Iron Wall" },
     mage: { name: "MAGE", c1: "#6a3cc2", c2: "#e2b845", stats: [2, 9, 6, 5, 2, 7], line: "Turns the weather into a weapon.", skill: "Thunderstorm" },
     archer: { name: "ARCHER", c1: "#3f8a45", c2: "#8a5a32", stats: [5, 2, 9, 7, 4, 3], line: "Rarely needs a second arrow.", skill: "Deadeye" },
     healer: { name: "HEALER", c1: "#f1efe6", c2: "#2fa6a0", stats: [2, 7, 5, 5, 3, 9], line: "Keeps the whole party standing.", skill: "Sanctuary" },
-    assassin: { name: "ASSASSIN", c1: "#2a2d3e", c2: "#c0323c", stats: [6, 2, 8, 10, 3, 3], line: "In and out before the dust settles.", skill: "Shadowstep" },
+    assassin: { name: "ASSASSIN", c1: "#3a3d52", c2: "#c0323c", stats: [6, 2, 8, 10, 3, 3], line: "In and out before the dust settles.", skill: "Shadowstep" },
   };
   const HERO_KEYS = ["warrior", "knight", "mage", "archer", "healer", "assassin"];
   const HERO_STATS = ["STR", "MAG", "SKL", "SPD", "DEF", "RES"];
@@ -1015,109 +1015,238 @@
     return {
       s: celRamp(SKIN_TONES[h.skin]), h: celRamp(HAIR_COLORS[h.hairColor]),
       c1: celRamp(c.c1), c2: celRamp(c.c2),
-      mt: celRamp("#b9c2d6"), lt: celRamp("#7a5132"), au: celRamp("#e0b43e"), wd: celRamp("#8a5a32"),
-      ink: ["#1a1426", "#1a1426", "#1a1426", "#1a1426", "#ffffff", "#ffffff"],
+      mt: celRamp("#b9c2d6"), lt: celRamp("#7a5132"), au: celRamp("#e0b43e"), wd: celRamp("#9a6a3c"),
+      ink: ["#17131f", "#2b2742", "#17131f", "#17131f", "#ffffff", "#ffffff"],
+      sh: Array(6).fill("rgba(6,8,20,.45)"),
       mg: celGlow(h.cls === "healer" ? "#9ff3e6" : h.cls === "mage" ? "#c9a2ff" : "#9fd8ff"),
     };
   }
 
+  // one sprite part: dark ink outline, lit from the upper left, shadow band on the right
+  function spPart(G, polys, mat, o = {}) {
+    const m = celMask(G, polys);
+    const at = (x, y) => y >= 0 && y < G.h && x >= 0 && x < G.w && m[y][x];
+    if (o.outline !== false)
+      for (let y = 0; y < G.h; y++) for (let x = 0; x < G.w; x++)
+        if (!m[y][x] && (at(x + 1, y) || at(x - 1, y) || at(x, y + 1) || at(x, y - 1))) G.px[y][x] = [o.outlineMat || "ink", 0];
+    for (let y = 0; y < G.h; y++) {
+      let x = 0;
+      while (x < G.w) {
+        if (!m[y][x]) { x++; continue; }
+        let x1 = x;
+        while (x1 + 1 < G.w && m[y][x1 + 1]) x1++;
+        const w = x1 - x + 1;
+        for (let px = x; px <= x1; px++) {
+          let t = 3;
+          if (!o.flat) {
+            if (!at(px, y - 1) || (px === x && w > 2)) t = 4;
+            else if (w >= 3 && px >= x + Math.ceil(w * 0.6)) t = 2;
+            if (!at(px, y + 1) && w > 2 && px > x) t = Math.min(t, 2);
+            if (px === x1 && w >= 5 && at(px, y - 1)) t = 1;
+          }
+          G.px[y][px] = [mat, o.tone !== undefined ? o.tone : t];
+        }
+        x = x1 + 1;
+      }
+    }
+    return m;
+  }
+  // a tapered limb between two points, as a polygon
+  function limb(x1, y1, x2, y2, w1, w2 = w1) {
+    const dx = x2 - x1, dy = y2 - y1, l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
+    return [[x1 + (nx * w1) / 2, y1 + (ny * w1) / 2], [x2 + (nx * w2) / 2, y2 + (ny * w2) / 2], [x2 - (nx * w2) / 2, y2 - (ny * w2) / 2], [x1 - (nx * w1) / 2, y1 - (ny * w1) / 2]];
+  }
+  // arm or leg: two segments plus a round joint
+  const joint = (a, b, c, w1, w2, w3) => [limb(a[0], a[1], b[0], b[1], w1, w2), limb(b[0], b[1], c[0], c[1], w2, w3), oval(b[0], b[1], w2 / 2, w2 / 2, 12)];
+
+  // head, three-quarter view facing right: hair mass behind, face lower right
+  const HEAD = [
+    ".....kkkkkk....",
+    "...kkhHHHHhkk..",
+    "..khhHHhhhhhhk.",
+    ".khhhhhhhhhhhhk",
+    ".khhhhhhhhhhhhk",
+    "khhhhhhhhhhhhhk",
+    "khjhhhhhhhhjhhk",
+    "kjjhhhhjhjsjhsk",
+    "kjjhhjzsssssssk",
+    "kjjhzssssossosk",
+    "kjjjzzsssossosk",
+    ".kjjzssssssssqk",
+    "..kjjzssssszssk",
+    "...kkzzsssssk..",
+    ".....kkkkkkk...",
+  ];
+  const HEAD_KEY = { k: ["ink", 0], o: ["ink", 1], q: ["s", 4], s: ["s", 3], z: ["s", 2], H: ["h", 4], h: ["h", 3], j: ["h", 2], J: ["h", 1] };
+  function pixGrid(G, rows, x0, y0, key) {
+    rows.forEach((r, y) => [...r].forEach((ch, x) => {
+      const v = key[ch], X = x0 + x, Y = y0 + y;
+      if (v && X >= 0 && Y >= 0 && X < G.w && Y < G.h) G.px[Y][X] = v;
+    }));
+  }
+  const shift = (pts, x, y) => pts.map(([a, b]) => [a + x, b + y]);
+  function hairBack(G, h, hx, hy) {
+    if (h.hair === 2 && h.cls !== "assassin") spPart(G, [shift([[1, 5], [9, 5], [10, 20], [5, 27], [0, 26], [-2, 18]], hx, hy)], "h");
+  }
+  function drawHead(G, h, hx, hy) {
+    if (h.hair === 1 && h.cls !== "assassin")
+      spPart(G, [[[1, 6], [-4, 1], [3, 3]], [[1, 11], [-4, 10], [2, 8]], [[4, 3], [2, -3], [7, 1]], [[7, 1], [9, -4], [11, 1]], [[10, 2], [15, -2], [13, 4]], [[12, 5], [17, 5], [13, 8]]].map((p) => shift(p, hx, hy)), "h");
+    pixGrid(G, HEAD, hx, hy, HEAD_KEY);
+    if (h.hair === 2 && h.cls !== "assassin") spPart(G, [shift([[2, 8], [6, 7], [6, 16], [3, 17], [1, 13]], hx, hy)], "h");
+    if (h.cls === "healer") { celLine(G, hx + 2, hy + 5, hx + 13, hy + 6, "au", 4); celDot(G, hx + 11, hy + 6, "mg", 5); }
+    if (h.cls === "knight") celLine(G, hx + 2, hy + 5, hx + 13, hy + 6, "c1", 3);
+    if (h.cls === "assassin") {
+      spPart(G, [shift([[-1, 5], [3, -1], [9, -2], [14, 1], [16, 8], [13, 7], [12, 5], [6, 6], [5, 12], [3, 16], [-1, 14]], hx, hy)], "c1");
+      spPart(G, [shift([[5, 11], [15, 11], [14, 15], [6, 16]], hx, hy)], "c2");
+    }
+  }
+
   function drawHero(G, h) {
-    const cls = h.cls;
-    // long hair falls behind the body
-    if (h.hair === 2 && cls !== "assassin") celPart(G, [[[13, 12], [35, 12], [37, 34], [11, 34]]], "h");
-    // cape / cloak behind
-    if (cls === "knight") celPart(G, [[[13, 26], [35, 26], [38, 56], [10, 56]]], "c1");
-    if (cls === "archer") celPart(G, [[[12, 24], [36, 24], [37, 52], [11, 52]]], "c1");
-    if (cls === "archer") { celPart(G, [[[33, 20], [37, 18], [40, 34], [36, 35]]], "lt"); celLine(G, 36, 16, 38, 19, "wd", 4); celLine(G, 38, 15, 40, 18, "wd", 4); }
-    // legs
-    const robe = cls === "mage" || cls === "healer";
-    if (!robe) {
-      celPart(G, [[[17, 44], [23, 44], [23, 56], [17, 56]], [[25, 44], [31, 44], [31, 56], [25, 56]]], cls === "knight" ? "mt" : cls === "assassin" ? "c1" : "lt");
-      celPart(G, [[[15, 55], [23, 55], [23, 61], [14, 61]], [[25, 55], [33, 55], [34, 61], [25, 61]]], cls === "knight" ? "mt" : "lt");
-    }
-    // torso by class
+    const cls = h.cls, S = "s";
+    spPart(G, [oval(31, 58.5, 17, 2.6, 24)], "sh", { outline: false, flat: true });
     if (cls === "warrior") {
-      celPart(G, [[[16, 26], [32, 26], [33, 45], [15, 45]]], "lt");
-      celPart(G, [[[16, 38], [32, 38], [32, 42], [16, 42]]], "c1");
-      celDot(G, 24, 40, "au", 4); celDot(G, 23, 40, "au", 3);
-      celPart(G, [[[21, 26], [27, 26], [26, 31], [22, 31]]], "s", { outline: false });
+      const hx = 24, hy = 9;
+      hairBack(G, h, hx, hy);
+      spPart(G, joint([27, 28], [22, 34], [25, 39], 5, 5, 4), S);
+      spPart(G, [limb(23, 35, 25, 38, 5)], "lt");
+      spPart(G, [oval(26, 39.5, 2.5, 2.5)], S);
+      spPart(G, joint([28, 42], [23, 49], [20, 55], 7, 6, 5), "c2");
+      spPart(G, [[[16, 53], [23, 53], [24, 58], [14, 58]]], "lt");
+      spPart(G, [[[25, 25], [40, 25], [41, 31], [38, 39], [27, 39], [25, 32]]], "lt");
+      spPart(G, [[[31, 25], [36, 25], [34, 31], [33, 31]]], S, { outline: false });
+      spPart(G, [[[26, 39], [39, 39], [41, 45], [25, 45]]], "c2");
+      spPart(G, [[[26, 36], [39, 36], [39, 40], [26, 40]]], "c1");
+      celDot(G, 33, 38, "au", 4); celDot(G, 34, 38, "au", 3);
+      spPart(G, [[[28, 39], [32, 39], [31, 47], [28, 46]]], "c1");
+      spPart(G, joint([36, 42], [41, 48], [42, 55], 7, 6, 5), "c2");
+      spPart(G, [[[38, 53], [45, 53], [48, 58], [38, 58]]], "lt");
+      spPart(G, [[[31, 21], [36, 21], [36, 26], [31, 26]]], S);
+      drawHead(G, h, hx, hy);
+      spPart(G, [limb(40, 51, 55, 13, 2.4)], "wd");
+      spPart(G, [[[51, 12], [56, 11], [62, 6], [63, 17], [60, 26], [55, 20], [51, 21]]], "mt");
+      spPart(G, [[[51, 13], [46, 11], [46, 19], [51, 19]]], "mt");
+      celLine(G, 57, 12, 60, 9, "mt", 5); celLine(G, 61, 9, 61, 19, "mt", 5);
+      spPart(G, joint([38, 27], [44, 32], [47, 36], 6, 5, 4), S);
+      spPart(G, [limb(44, 32, 47, 35, 5)], "lt");
+      spPart(G, [oval(46.5, 36.5, 2.6, 2.6)], S);
+      spPart(G, [oval(41, 28.5, 4, 3.2)], "mt");
+      celLine(G, 29, 26, 38, 37, "c2", 2);
     } else if (cls === "knight") {
-      celPart(G, [[[15, 25], [33, 25], [33, 45], [15, 45]]], "mt");
-      celPart(G, [[[20, 29], [28, 29], [28, 45], [20, 45]]], "c1", { outline: false });
-      celPart(G, [[[22, 32], [26, 32], [26, 34], [22, 34]], [[23, 31], [25, 31], [25, 37], [23, 37]]], "au", { outline: false });
+      const hx = 24, hy = 8;
+      hairBack(G, h, hx, hy);
+      spPart(G, [[[27, 25], [36, 25], [31, 37], [23, 52], [11, 56], [9, 52], [17, 41]]], "c1");
+      spPart(G, [oval(26, 26, 5, 4)], "mt");
+      spPart(G, joint([28, 41], [25, 48], [23, 55], 7, 7, 6), "mt");
+      spPart(G, [[[18, 53], [27, 53], [28, 58], [17, 58]]], "mt");
+      spPart(G, [[[24, 24], [41, 24], [42, 33], [39, 40], [26, 40], [24, 33]]], "mt");
+      spPart(G, [[[25, 38], [40, 38], [42, 44], [23, 44]]], "mt");
+      spPart(G, [[[25, 37], [40, 37], [40, 40], [25, 40]]], "c1");
+      celDot(G, 34, 38, "au", 4); celDot(G, 35, 38, "au", 3);
+      celLine(G, 28, 29, 37, 29, "c1", 3); celLine(G, 32, 30, 33, 35, "mt", 5);
+      spPart(G, joint([36, 41], [40, 48], [41, 55], 7, 7, 6), "mt");
+      spPart(G, [[[37, 53], [46, 53], [48, 58], [37, 58]]], "mt");
+      spPart(G, [[[31, 20], [36, 20], [36, 25], [31, 25]]], S);
+      drawHead(G, h, hx, hy);
+      spPart(G, [[[15, 28], [27, 28], [27, 42], [21, 49], [15, 42]]], "c1", {});
+      spPart(G, [[[18, 31], [24, 31], [24, 41], [21, 45], [18, 41]]], "c1", { tone: 4, outline: false });
+      spPart(G, [[[20, 32], [22, 32], [22, 42], [20, 42]], [[17.5, 35], [25, 35], [25, 37], [17.5, 37]]], "au", { outline: false });
+      spPart(G, [limb(37, 54, 54, 8, 2.4)], "wd");
+      spPart(G, [[[51, 10], [56, 0], [57, 11]]], "mt");
+      spPart(G, [limb(52, 13, 56, 14, 2.2)], "au");
+      spPart(G, joint([39, 27], [43, 33], [45, 37], 6, 6, 5), "mt");
+      spPart(G, [oval(45, 37, 2.7, 2.7)], "mt");
+      spPart(G, [oval(41.5, 27.5, 5.2, 4)], "mt");
+      celLine(G, 38, 28, 45, 28, "c1", 3);
     } else if (cls === "mage") {
-      celPart(G, [[[16, 25], [32, 25], [36, 61], [12, 61]]], "c1");
-      celPart(G, [[[22, 25], [26, 25], [26, 61], [22, 61]]], "c2", { outline: false });
-      celPart(G, [[[13, 58], [35, 58], [36, 61], [12, 61]]], "c2", { outline: false });
-    } else if (cls === "healer") {
-      celPart(G, [[[16, 25], [32, 25], [35, 61], [13, 61]]], "c1");
-      celPart(G, [[[21, 25], [27, 25], [26, 50], [22, 50]]], "c2", { outline: false });
-      celPart(G, [[[14, 57], [34, 57], [35, 61], [13, 61]]], "c2", { outline: false });
-      celPart(G, [[[16, 25], [32, 25], [31, 29], [17, 29]]], "au", { outline: false });
+      const hx = 24, hy = 10;
+      hairBack(G, h, hx, hy);
+      spPart(G, [[[27, 26], [37, 26], [31, 36], [23, 50], [13, 56], [9, 52], [18, 40]]], "c1");
+      spPart(G, joint([27, 28], [24, 34], [30, 36], 5, 5, 4), "c1");
+      spPart(G, [[[26, 25], [40, 25], [41, 36], [45, 56], [38, 57], [31, 56], [22, 57], [24, 40]]], "c1");
+      spPart(G, [[[22.5, 53], [44.5, 53], [45, 57], [22, 57]]], "c2");
+      celLine(G, 35, 28, 37, 53, "c2", 3);
+      spPart(G, [[[25, 35], [41, 35], [41, 37], [25, 37]]], "c2");
+      spPart(G, [[[26, 57], [31, 57], [31, 59], [25, 59]], [[37, 57], [42, 57], [44, 59], [37, 59]]], "lt");
+      spPart(G, [[[31, 22], [36, 22], [36, 27], [31, 27]]], S);
+      spPart(G, [[[25, 24], [41, 24], [43, 29], [34, 31], [23, 29]]], "c2");
+      drawHead(G, h, hx, hy);
+      spPart(G, [[[26, 31], [33, 29], [35, 37], [28, 39]]], "c2");
+      spPart(G, [[[27, 32], [32, 30.5], [33.5, 36], [28.5, 37.5]]], "c1", { outline: false, tone: 2 });
+      spPart(G, [oval(31, 36.5, 2.3, 2.3)], S);
+      spPart(G, [limb(39, 27, 45, 31, 6, 6), limb(45, 31, 49, 29, 6, 7)], "c1");
+      spPart(G, [limb(47, 29.5, 49.5, 29, 7.5, 7.5)], "c2");
+      spPart(G, [oval(52, 28.5, 2.4, 2.4)], S);
+      spPart(G, [oval(57, 26, 4.2, 4.2, 16)], "mg", { outline: false, tone: 3 });
+      spPart(G, [oval(57, 26, 2.2, 2.2, 12)], "mg", { outline: false, tone: 5 });
+      [[54, 19], [61, 21], [62, 31], [55, 33], [59, 17]].forEach(([x, y], i) => celDot(G, x, y, "mg", i % 2 ? 4 : 5));
     } else if (cls === "archer") {
-      celPart(G, [[[16, 26], [32, 26], [33, 46], [15, 46]]], "c1");
-      celPart(G, [[[15, 40], [33, 40], [33, 43], [15, 43]]], "lt", { outline: false });
-      celLine(G, 17, 27, 31, 39, "lt", 2);
-    } else {
-      celPart(G, [[[16, 26], [32, 26], [33, 45], [15, 45]]], "c1");
-      celPart(G, [[[15, 39], [33, 39], [33, 41], [15, 41]]], "c2", { outline: false });
-    }
-    // shoulders / pauldrons
-    if (cls === "knight") celPart(G, [oval(14, 27, 5, 4), oval(34, 27, 5, 4)], "mt");
-    if (cls === "warrior") celPart(G, [oval(14, 27, 5, 3.5)], "c2");
-    // arms
-    const sleeve = cls === "warrior" ? "s" : cls === "knight" ? "mt" : cls === "mage" || cls === "healer" ? "c1" : cls === "archer" ? "c1" : "c1";
-    celPart(G, [[[10, 27], [16, 27], [16, 42], [10, 42]], [[32, 27], [38, 27], [38, 42], [32, 42]]], sleeve);
-    if (cls === "archer" || cls === "assassin") celPart(G, [[[10, 36], [16, 36], [16, 41], [10, 41]], [[32, 36], [38, 36], [38, 41], [32, 41]]], "lt", { outline: false });
-    celPart(G, [oval(13, 43, 2.6, 2.4), oval(35, 43, 2.6, 2.4)], "s");
-    // neck + head
-    celPart(G, [[[21, 22], [27, 22], [27, 27], [21, 27]]], "s");
-    celPart(G, [oval(24, 15, 9, 9.5)], "s");
-    celPart(G, [[[19, 22], [29, 22], [27, 25], [21, 25]]], "s", { outline: false, tone: 2 });
-    // face: eyes, brows, mouth
-    const eye = (x) => { celDot(G, x, 16, "ink", 0); celDot(G, x + 1, 16, "ink", 0); celDot(G, x, 17, "ink", 0); celDot(G, x + 1, 17, "ink", 4); celLine(G, x - 1, 15, x + 1, 15, "h", 1); };
-    eye(19); eye(27);
-    celLine(G, 23, 21, 25, 21, "s", 1);
-    celDot(G, 18, 19, "s", 4); celDot(G, 30, 19, "s", 4);
-    // hair / hood
-    if (cls === "assassin") {
-      celPart(G, [[[13, 14], [16, 5], [24, 2], [32, 5], [35, 14], [35, 26], [31, 24], [31, 12], [17, 12], [17, 24], [13, 26]]], "c1");
-      celPart(G, [[[17, 11], [31, 11], [30, 14], [18, 14]]], "h", { outline: false });
-      celPart(G, [[[16, 19], [32, 19], [31, 25], [17, 25]]], "c2");
-    } else {
-      const hairTop = [[14, 16], [15, 8], [20, 4], [28, 4], [33, 8], [34, 16], [31, 12], [26, 10], [21, 10], [17, 12]];
-      celPart(G, [hairTop], "h");
-      if (h.hair === 0) celPart(G, [[[15, 10], [22, 8], [20, 15], [17, 13]], [[20, 8], [28, 8], [25, 14], [23, 11]], [[26, 8], [33, 10], [32, 16], [29, 12]]], "h");
-      if (h.hair === 1) celPart(G, [[[14, 10], [11, 3], [18, 6]], [[18, 6], [19, -1], [24, 4]], [[24, 4], [30, -1], [29, 6]], [[29, 6], [37, 3], [34, 11]], [[15, 11], [22, 8], [19, 15]], [[27, 8], [34, 11], [31, 15]]], "h");
-      if (h.hair === 2) celPart(G, [[[14, 9], [22, 7], [18, 16], [15, 22], [13, 18]], [[26, 7], [34, 9], [35, 18], [33, 22], [30, 16]], [[20, 7], [28, 7], [25, 13]]], "h");
-      celLine(G, 19, 6, 23, 5, "h", 5); celLine(G, 24, 5, 27, 5, "h", 4);
-    }
-    if (cls === "healer") celPart(G, [[[16, 7], [32, 7], [31, 9], [17, 9]]], "au", { outline: false });
-    // weapons
-    if (cls === "warrior") {
-      celPart(G, [[[37, 10], [39, 10], [39, 50], [37, 50]]], "wd");
-      celPart(G, [[[39, 9], [46, 6], [47, 20], [39, 17]]], "mt");
-      celPart(G, [[[36, 9], [31, 7], [31, 17], [36, 15]]], "mt");
-    } else if (cls === "knight") {
-      celPart(G, [[[37, 2], [39, 2], [39, 60], [37, 60]]], "wd");
-      celPart(G, [[[36, 4], [38, -2], [40, 4], [38, 9]]], "mt");
-      celPart(G, [[[3, 29], [14, 29], [14, 44], [8.5, 50], [3, 44]]], "c1");
-      celPart(G, [[[7, 33], [10, 33], [10, 43], [7, 43]], [[5, 36], [12, 36], [12, 39], [5, 39]]], "au", { outline: false });
-    } else if (cls === "mage") {
-      celPart(G, [[[37, 12], [39, 12], [39, 62], [37, 62]]], "wd");
-      celPart(G, [oval(38, 9, 3.4, 3.4)], "mg", { flat: true, tone: 3 });
-      celDot(G, 37, 8, "mg", 5);
-      celPart(G, [[[5, 38], [14, 38], [14, 46], [5, 46]]], "c2");
+      const hx = 23, hy = 9;
+      hairBack(G, h, hx, hy);
+      spPart(G, [[[20, 21], [25, 19], [30, 36], [25, 38]]], "lt");
+      [[20, 18], [22, 17], [24, 16]].forEach(([x, y]) => { celLine(G, x, y + 3, x + 1, y, "c2", 4); celDot(G, x + 1, y - 1, "mt", 5); });
+      spPart(G, joint([28, 42], [23, 49], [21, 55], 6, 6, 5), "c2");
+      spPart(G, [[[16, 53], [23, 53], [24, 58], [15, 58]]], "lt");
+      spPart(G, [[[26, 25], [39, 25], [40, 36], [42, 46], [25, 46], [26, 36]]], "c1");
+      spPart(G, joint([35, 42], [39, 49], [40, 55], 6, 6, 5), "c2");
+      spPart(G, [[[36, 53], [44, 53], [46, 58], [36, 58]]], "lt");
+      spPart(G, [[[25, 36], [41, 36], [41, 39], [25, 39]]], "lt");
+      celLine(G, 28, 26, 38, 36, "lt", 2);
+      spPart(G, [[[31, 21], [36, 21], [36, 26], [31, 26]]], S);
+      drawHead(G, h, hx, hy);
+      celLine(G, 49, 11, 36, 28, "mt", 5); celLine(G, 36, 28, 49, 45, "mt", 5);
+      const bow = [];
+      for (let i = 0; i < 16; i++) { const a = -1.25 + (i / 15) * 2.5, b = -1.25 + ((i + 1) / 15) * 2.5; bow.push(limb(46 + Math.cos(a) * 8, 28 + Math.sin(a) * 17, 46 + Math.cos(b) * 8, 28 + Math.sin(b) * 17, Math.abs(a) < 0.5 ? 3 : 2)); }
+      spPart(G, bow, "wd");
+      spPart(G, [limb(52, 25, 55, 31, 3)], "lt");
+      spPart(G, [limb(38, 27, 51, 28, 5, 4)], "c1");
+      spPart(G, [limb(46, 27.5, 51, 28, 4.5)], "lt");
+      spPart(G, [oval(53, 28, 2.3, 2.3)], S);
+      spPart(G, [limb(37, 28, 58, 28, 1.2)], "wd", { outline: false, tone: 4 });
+      spPart(G, [[[57, 26], [61, 28], [57, 30]]], "mt");
+      spPart(G, joint([28, 27], [23, 27], [34, 28], 5, 5, 4), "c1");
+      spPart(G, [oval(35.5, 28, 2.3, 2.3)], S);
     } else if (cls === "healer") {
-      celPart(G, [[[37, 12], [39, 12], [39, 62], [37, 62]]], "au");
-      celPart(G, [oval(38, 8, 4, 4)], "au");
-      celPart(G, [oval(38, 8, 2, 2)], "mg", { outline: false, flat: true, tone: 3 });
-    } else if (cls === "archer") {
-      for (let i = -16; i <= 16; i++) { const x = Math.round(8 - Math.sqrt(Math.max(0, 256 - i * i)) * 0.35), y = 42 + i; celDot(G, x, y, "wd", i < 0 ? 4 : 2); celDot(G, x - 1, y, "wd", 0); }
-      celLine(G, 8, 26, 8, 58, "ink", 4);
+      const hx = 24, hy = 10;
+      hairBack(G, h, hx, hy);
+      spPart(G, [[[27, 25], [36, 25], [31, 36], [24, 52], [14, 56], [11, 51], [19, 40]]], "c2");
+      spPart(G, [[[26, 25], [39, 25], [40, 37], [44, 57], [23, 57], [25, 37]]], "c1");
+      spPart(G, [[[31.5, 27], [35, 27], [36.5, 54], [30.5, 54]]], "c2", { outline: false });
+      spPart(G, [[[23, 54], [44, 54], [44.5, 57], [22.5, 57]]], "c2", { outline: false });
+      spPart(G, [[[25, 36], [40, 36], [40, 38.5], [25, 38.5]]], "au");
+      spPart(G, [[[31, 22], [36, 22], [36, 27], [31, 27]]], S);
+      spPart(G, [[[25, 24], [41, 24], [42, 28], [33, 30], [24, 28]]], "c1");
+      celLine(G, 26, 27, 41, 27, "au", 4);
+      drawHead(G, h, hx, hy);
+      spPart(G, joint([28, 28], [27, 34], [32, 33], 5, 5, 4), "c1");
+      spPart(G, [oval(33, 33, 2.3, 2.3)], S);
+      spPart(G, [limb(47, 57, 47, 10, 2.4)], "au");
+      spPart(G, [oval(47, 8, 4.2, 4.2, 16)], "au");
+      spPart(G, [oval(47, 8, 2.2, 2.2, 12)], "mg", { outline: false, tone: 4 });
+      celDot(G, 46, 7, "mg", 5);
+      spPart(G, [[[43, 9], [38, 5], [41, 11]], [[51, 9], [56, 5], [53, 11]]], "au");
+      spPart(G, joint([39, 27], [42, 34], [46, 34], 6, 5, 5), "c1");
+      spPart(G, [oval(47, 34, 2.5, 2.5)], S);
     } else {
-      celPart(G, [[[35, 44], [36, 44], [43, 34], [42, 33]]], "mt");
-      celPart(G, [[[12, 44], [13, 44], [6, 34], [5, 35]]], "mt");
+      const hx = 27, hy = 13;
+      spPart(G, [[[30, 26], [34, 27], [26, 31], [16, 28], [8, 33], [5, 29], [13, 23], [24, 24]]], "c2");
+      spPart(G, joint([29, 31], [24, 36], [27, 40], 5, 5, 4), "c1");
+      spPart(G, [oval(27.5, 40.5, 2.3, 2.3)], S);
+      spPart(G, [limb(26.5, 42, 21, 48, 2, 1)], "mt");
+      spPart(G, joint([29, 43], [20, 48], [14, 55], 6, 6, 5), "c1");
+      spPart(G, [[[9, 53], [16, 53], [16, 58], [8, 58]]], "lt");
+      spPart(G, [[[27, 28], [40, 28], [42, 35], [39, 43], [27, 43], [25, 35]]], "c1");
+      spPart(G, [[[26, 39], [40, 39], [40, 42], [26, 42]]], "lt");
+      celDot(G, 30, 40, "au", 4);
+      spPart(G, joint([36, 43], [44, 47], [43, 55], 7, 6, 5), "c1");
+      spPart(G, [limb(43, 50, 43, 54, 5.5)], "lt");
+      spPart(G, [[[39, 53], [47, 53], [50, 58], [39, 58]]], "lt");
+      spPart(G, [[[34, 25], [39, 25], [39, 29], [34, 29]]], S);
+      drawHead(G, h, hx, hy);
+      spPart(G, joint([39, 30], [45, 34], [49, 35], 5, 5, 4), "c1");
+      spPart(G, [limb(46, 34.5, 49, 35, 4.5)], "lt");
+      spPart(G, [limb(52, 34, 61, 30, 2.4, 1)], "mt");
+      celLine(G, 51, 32, 52, 37, "au", 4);
+      spPart(G, [oval(50.5, 35, 2.3, 2.3)], S);
     }
   }
 
